@@ -20,6 +20,42 @@
 @ Interpreter and optimisations
 
 @ -----------------------------------------------------------------------------
+  Wortbirne Flag_visible, "evaluate" @ ( -- )
+@ -----------------------------------------------------------------------------
+  push {lr}
+  bl source             @ Save current source
+  
+  @ 2>r
+  ldm psp!, {r0}
+  push {r0}
+  push {tos}
+  ldm psp!, {tos}
+
+  ldr r0, =Pufferstand  @ Save >in and set to zero
+  ldr r1, [r0]
+  push {r1}
+  movs r1, #0
+  str r1, [r0]
+
+  bl setsource          @ Set new source
+  bl interpret          @ Interpret
+
+  ldr r0, =Pufferstand  @ Restore >in
+  pop {r1}
+  str r1, [r0]
+
+  @ 2r>
+  pushdatos
+  pop {tos}
+  pop {r0}
+  subs psp, #4
+  str r0, [psp]
+
+  bl setsource          @ Restore old source
+
+  pop {pc}
+
+@ -----------------------------------------------------------------------------
   Wortbirne Flag_visible, "interpret" @ ( -- )
 interpret:
 @ -----------------------------------------------------------------------------
@@ -43,20 +79,7 @@ interpret:
 
 3: @ Alles ok.  Stacks are fine.
 
-  bl token
-  @ Prüfe, ob der String leer ist  Check if token is empty - that designates an empty input buffer.
-  popda r0        @ Stringadresse holen
-  ldrb r1, [r0]   @ Länge des Strings holen
-  cmp r1, #0
-  bne.n 2f
-    pop {r4, r5, pc}
-
 @ -----------------------------------------------------------------------------
-2:@ String aus Token angekommen.  We have a string to interpret.
-  @ ( -- )
-
-  @ Registerkarte:
-  @  r0: Stringadresse des Tokens  Address of string
 
   @ Konstantenfaltungszeiger setzen, falls er das noch nicht ist.
   @ Set Constant-Folding-Pointer
@@ -70,22 +93,35 @@ interpret:
     str r5, [r4]
 3:
 
+@ -----------------------------------------------------------------------------
+  bl token
+  @ ( Address Length )
+
+  @ Prüfe, ob der String leer ist  Check if token is empty - that designates an empty input buffer.
+  cmp tos, #0
+  bne.n 2f
+    ddrop
+    pop {r4, r5, pc}
+2:
+
+@ -----------------------------------------------------------------------------
+  @ String aus Token angekommen.  We have a string to interpret.
+  @ ( Address Length )
+
   @ Registerkarte:
-  @  r0: Stringadresse des Tokens               Address of string
   @  r4: Adresse des Konstantenfaltungszeigers  Address of constant folding pointer
   @  r5: Konstantenfaltungszeiger               Constant folding pointer
 
-
-  @ ( -- )
-  pushda r0 @ Stringadresse bereitlegen  Put string address on datastack
+  ddup
   bl find @ Probe, ob es sich um ein Wort aus dem Dictionary handelt:  Attemp to find token in dictionary.
-  @ ( Addr Flags )
+  @ ( Token-Addr Token-Length Addr Flags )
+
   popda r1 @ Flags
-  popda r2 @ Addr
-  @ ( -- )
+  popda r2 @ Einsprungadresse
+
+  @ ( Token-Addr Token-Length )
 
   @ Registerkarte:
-  @  r0: Stringadresse des Tokens               Address of string
   @  r1: Flags                                  Flags
   @  r2: Einsprungadresse                       Code entry point
   @  r4: Adresse des Konstantenfaltungszeigers  Address of constant folding pointer
@@ -95,7 +131,10 @@ interpret:
   bne.n 4f
     @ Nicht gefunden. Ein Fall für Number.
     @ Entry-Address is zero if not found ! Note that Flags have very special meanings in Mecrisp !
-    pushda r0
+
+    ldr r0, [psp]
+    movs r1, tos
+
     bl number
 
   @ Number gives back ( 0 ) or ( x 1 ).
@@ -105,16 +144,26 @@ interpret:
 
     popda r2   @ Flag von Number holen
     cmp r2, #0 @ Did number recognize the string ?
-    bne.n 1b     @ Zahl gefunden, alles gut. Interpretschleife fortsetzen.  Finished.
+    bne.n 1b   @ Zahl gefunden, alles gut. Interpretschleife fortsetzen.  Finished.
 
     @ Number mochte das Token auch nicht.
-    pushda r0
-    bl type
+not_found_addr_r0_len_r1:
+@    pushda r0
+@    pushda r1
+    bl stype_addr_r0_len_r1
     Fehler_Quit_n " not found."
 
 @ -----------------------------------------------------------------------------
 4:@ Token im Dictionary gefunden. Found token in dictionary. Decide what to do.
-  @ ( -- )
+
+  @ ( Token-Addr Token-Length )
+
+  @ Registerkarte:
+  @  r1: Flags                                  Flags
+  @  r2: Einsprungadresse                       Code entry point
+  @  r4: Adresse des Konstantenfaltungszeigers  Address of constant folding pointer
+  @  r5: Konstantenfaltungszeiger               Constant folding pointer
+
   ldr r3, =state
   ldr r3, [r3]
   cmp r3, #0
@@ -123,16 +172,15 @@ interpret:
     movs r5, #0   @ Konstantenfaltungszeiger löschen  Clear constant folding pointer
     str r5, [r4]  @ Do not collect literals for folding in execute mode. They simply stay on stack.
 
-    movs r3, #Flag_immediate_compileonly
+    movs r3, #Flag_immediate_compileonly & ~Flag_visible
     ands r3, r1
-    cmp r3, #Flag_immediate_compileonly
+    cmp r3, #Flag_immediate_compileonly & ~Flag_visible
     bne.n .ausfuehren
-
-      pushda r0
-      bl type
+      bl stype
       Fehler_Quit_n " is compile-only."
 
 .ausfuehren:
+    ddrop
     pushda r2    @ Adresse zum Ausführen   Code entry point
     bl execute   @                         Execute it
     bl 1b @ Interpretschleife fortsetzen.  Finished.
@@ -149,16 +197,16 @@ interpret:
 
 @ -----------------------------------------------------------------------------
 5:@ Im Kompilierzustand.  In compile state.
+    ddrop
 
     @ Prüfe das Ramallot-Flag, das automatisch 0-faltbar bedeutet:
     @ Ramallot-Words always are 0-foldable !
     @ Check this first, as Ramallot is set together with foldability,
     @ but the meaning of the lower 4 bits is different.
 
-    movs r0, #Flag_ramallot
+    movs r0, #Flag_ramallot & ~Flag_visible
     ands r0, r1 @ Flagfeld auf Faltbarkeit hin prüfen
-    cmp r0, #Flag_ramallot
-    beq.n .interpret_faltoptimierung
+    bne.n .interpret_faltoptimierung
 
     @ Bestimme die Anzahl der zur Faltung bereitliegenden Konstanten:
     @ Calculate number of folding constants available.
@@ -170,16 +218,14 @@ interpret:
     @ Prüfe die Faltbarkeit des aktuellen Tokens:
     @ Check for foldability.
     
-    movs r0, #Flag_foldable
+    movs r0, #Flag_foldable & ~Flag_visible
     ands r0, r1 @ Flagfeld auf Faltbarkeit hin prüfen
-    cmp r0, #Flag_foldable
-    bne.n .konstantenschleife
+    beq.n .konstantenschleife
 
       @ Check for opcodability.
-      movs r0, #Flag_opcodable
+      movs r0, #Flag_opcodable & ~Flag_visible
       ands r0, r1
-      cmp r0, #Flag_opcodable
-      bne.n .interpret_genugkonstanten @ Flag is set
+      beq.n .interpret_genugkonstanten @ Flag is set
       cmp r3, #0 @ And at least one constant is available for folding.
       beq.n .interpret_genugkonstanten
         b.n .interpret_opcodierbar
@@ -210,18 +256,16 @@ interpret:
   @ Classic compilation.
   pushda r2 @ Adresse zum klassischen Bearbeiten. Put code entry point on datastack.
 
-  movs r2, #Flag_immediate
+  movs r2, #Flag_immediate & ~Flag_visible
   ands r2, r1
-  cmp r2, #Flag_immediate
-  bne.n 6f
+  beq.n 6f
     @ Es ist immediate. Immer ausführen. Always execute immediate definitions.
     bl execute @ Ausführen.
     b.n 1b @ Zurück in die Interpret-Schleife.  Finished.
 
-6:movs r2, #Flag_inline
-  ands r2, r1  
-  cmp r2, #Flag_inline
-  bne.n 7f
+6:movs r2, #Flag_inline & ~Flag_visible
+  ands r2, r1
+  beq.n 7f
   
   bl inlinekomma @ Direkt einfügen.        Inline the code
   b.n 1b @ Zurück in die Interpret-Schleife  Finished.
@@ -241,6 +285,11 @@ interpret:
   movs r0, #7 @ Mask for opcoding cases
   ands r1, r0
 
+  @ Most opcodable cases have special opcodes at the end of the definition.
+  @ Prepare this place to be available in r0
+  movs r0, r2 @ Entry point
+  bl suchedefinitionsende @ Search for end of Definition
+
   cmp r1, #1
   bne.n .interpret_opcodierbar_rechenlogik
     @------------------------------------------------------------------------------
@@ -252,32 +301,45 @@ interpret:
     @ Exactly one constant.
 
     @ Is constant small enough to fit in one Byte ?
-    popda r3 @ Fetch constant
-
-    movs r0, #0xFF  @ Mask for 8 Bits
-    ands r0, r3
-    cmp r0, r3
+    movs r1, #0xFF  @ Mask for 8 Bits
+    ands r1, tos
+    cmp r1, tos
     bne.n 2f
     @ Equal ? Constant fits in 8 Bits.
 
-    movs r0, r2 @ Entry point
-    bl suchedefinitionsende @ Search for end of Definition
-    adds r0, #2 @ Two more for Register-Opcode
-    ldrh r0, [r0] @ Fetch Opcode
-    orrs r0, r3 @ Put constant into Opcode
-    b.n 3f
+      ldrh r0, [r0, #2] @ Fetch Opcode, two more for Register-Opcode
+      orrs tos, r0 @ Put constant into Opcode
+      bl hkomma
+      b.n 1b @ Finished.
+      
+2:  
 
-2:  @ Larger constant. Put it in register first.
-    pushda r3
-4:  pushdaconst 0
+    .ifndef m0core
+      @ M3/M4 cores offer additional opcodes with 12-bit encoded constants.
+      bl twelvebitencoding
+
+      cmp tos, #0
+      drop   @ Preserves Flags !
+      beq 3f
+        @ Encoding of constant within 12 bits is possible. Generate Opcode !
+        ldr r0, [r0, #4] @ Fetch 32-Bit-Opcode, this is possible without alignment here,
+                         @ Four more for M3/M4-Opcodes
+        orrs tos, r0
+        bl reversekomma
+        b.n 1b @ Finished.
+3:
+    .endif
+
+.interpret_opcodieren_ueber_r0:
+    @ Large constant without short encoding possibility. Put it in register first.
+    pushdaconst 0
     bl registerliteralkomma
 
-    movs r0, r2 @ Entry point
-    bl suchedefinitionsende @ Search for end of Definition
-    ldrh r0, [r0] @ Fetch Opcode
-3:  pushda r0
+    pushdatos
+    ldrh tos, [r0] @ Fetch Opcode
     bl hkomma
     b.n 1b @ Finished.
+
 
 .interpret_opcodierbar_rechenlogik:
   cmp r1, #2
@@ -289,7 +351,8 @@ interpret:
     cmp r3, #1
     bne.n .interpret_faltoptimierung @ Opcode only with exactly one constant. Do folding with two constants or more in this case !
     @ Exactly one constant. M0 needs all constant sizes available in registers.
-    b.n 4b @ Simply reuse code as for plus and minus.
+    b.n .interpret_opcodieren_ueber_r0 @ Simply reuse code as for plus and minus.
+
 
 .interpret_opcodierbar_gleichungleich:
   cmp r1, #3
@@ -302,26 +365,39 @@ interpret:
     @ Exactly one constant.
 
     @ Is constant small enough to fit in one Byte ?
-    popda r3 @ Fetch constant
-
-    movs r0, #0xFF  @ Mask for 8 Bits
-    ands r0, r3
-    cmp r0, r3
+    movs r1, #0xFF  @ Mask for 8 Bits
+    ands r1, tos
+    cmp r1, tos
     bne.n 2f
     @ Equal ? Constant fits in 8 Bits.
 
-      ldr r0, =0x3E00 @ Opcode subs r6, #0
-      orrs r0, r3
-      pushda r0
+      ldr r1, =0x3E00 @ Opcode subs r6, #0
+      orrs tos, r1
       bl hkomma
 
-      adds r2, #4 @ Skip first two instructions of definition
+4:    adds r2, #4 @ Skip first two instructions of definition
       pushda r2
       bl inlinekomma
       b.n 1b @ Finished.
  
-2:  @ Larger constant. Put it in register first.
-    pushda r3
+2:  
+
+    .ifndef m0core
+      @ M3/M4 cores offer additional opcodes with 12-bit encoded constants.
+      bl twelvebitencoding
+
+      cmp tos, #0
+      drop   @ Preserves Flags !
+      beq 3f
+        @ Encoding of constant within 12 bits is possible.
+        ldr r1, =0xF1B60600 @ Opcode subs tos, tos, #imm12
+        orrs tos, r1
+        bl reversekomma
+        b.n 4b
+3:
+    .endif    
+
+    @ Larger constant. Put it in register first.
     pushdaconst 0
     bl registerliteralkomma
 
@@ -329,7 +405,6 @@ interpret:
     pushda r2
     bl inlinekomma
     b.n 1b @ Finished.
-
 
 
 .interpret_opcodierbar_schieben:
@@ -347,22 +422,20 @@ interpret:
     bne.n 2f
     b.n 1b @ Shift by zero ? No Opcode to generate. Finished !
 
-2:  movs r0, #0x1F @ 5 Bits
-    ands r0, r3
-    cmp r0, r3 @ Does shift fit in 5 Bits ?
+2:  movs r2, #0x1F @ 5 Bits
+    ands r2, r3
+    cmp r2, r3 @ Does shift fit in 5 Bits ?
     beq.n 3f
-      @ Shift more than 31 Places - Zero out TOS:
-      pushdaconstw 0x2600 @ Opcode movs tos, #0
+      @ Shift more than 31 Places - Zero out TOS or replace by an asrs tos, #31 opcode:
+      pushdatos
+      ldrh tos, [r0, #2] @ Fetch next opcode
       bl hkomma
-      b.n 1b
+      b.n 1b @ Finished.
 
-3:  movs r0, r2 @ Entry point
-    bl suchedefinitionsende @ Search for end of Definition
-    ldrh r0, [r0] @ Fetch Opcode
-
+3:  pushdatos
+    ldrh tos, [r0] @ Fetch Opcode
     lsls r3, #6  @ Shift places accordingly
-    orrs r0, r3  @ Build shift opcode
-    pushda r0
+    orrs tos, r3  @ Build shift opcode
     bl hkomma
     b.n 1b @ Finished.
 
@@ -373,23 +446,19 @@ interpret:
     @------------------------------------------------------------------------------
     @ Write memory
 
-    movs r0, r2 @ Entry point
-    bl suchedefinitionsende @ Search for end of Definition
-
     cmp r3, #1
     bne.n 2f @ Exactly one constant
 
     pushdaconst 0
     bl registerliteralkomma
 
-    ldrh r0, [r0] @ Fetch Opcode
     pushda r0
-    bl hkomma
-   
+    bl inlinekomma
+
     @ Compile Drop-Opcode
     pushdaconstw 0xcf40 @ Opcode for ldmia r7!, {r6}
     bl hkomma
-    b.n 1b
+    b.n 1b @ Finished.
 
 2:  @ Two or more constants.
     pushdaconst 0
@@ -398,19 +467,46 @@ interpret:
     pushdaconst 1
     bl registerliteralkomma
 
-    adds r0, #2  @ Skip to next opcode
-    ldrh r0, [r0] @ Fetch Opcode
-     pushda r0
-    bl hkomma
+    bl suchedefinitionsende
+
+    pushda r0
+    bl inlinekomma
     b.n 1b @ Finished.
 
-    @------------------------------------------------------------------------------
-    @ Special cases that do not have their own handling in interpret.
-    @ They have their own handlers at the end of definition that is called here.
 .interpret_opcodierbar_andere:
 
-  movs r0, r2
-  bl suchedefinitionsende
+  .ifndef m0core @ This is for M3/M4 only
+  @------------------------------------------------------------------------------
+  @ Check for architecture-specific special cases:
+
+  cmp r1, #6
+  bne.n 2f
+    @------------------------------------------------------------------------------
+    @ Logic with special opcodings available on M3/M4 only
+    cmp r3, #1
+    bne .interpret_faltoptimierung @ Opcode only with exactly one constant. Do folding with two constants or more in this case !
+
+    @ Check if constant available can be encoded as 12-bit-bitmask
+    bl twelvebitencoding
+
+    cmp tos, #0
+    drop   @ Preserves Flags !
+    beq .interpret_opcodieren_ueber_r0 @ Simply reuse code as for plus and minus.
+
+      @ 12-bit-encoding is possible. Generate the opcode :-)
+
+      ldr r0, [r0, #2] @ Fetch 32-Bit Thumb-2 Opcode, this can be done on M3/M4 without alignment
+                   @ Two more for the advanced M3-Opcode
+      orrs tos, r0
+      bl reversekomma
+      b.n 1b @ Finished.
+2:
+  .endif
+
+  @------------------------------------------------------------------------------
+  @ Special cases that do not have their own handling in interpret.
+  @ They have their own handlers at the end of definition that is called here.
+
   adds r0, #1 @ One more for Thumb
   blx r0
   b.n 1b @ Finished.  
@@ -420,7 +516,7 @@ interpret:
 konstantenschreiben: @ Special internal entry point with register dependencies.
 @ -----------------------------------------------------------------------------
     push {lr}
-    cmp r3, #0 @ Null Konstanten liegen bereit ? Zero constants available ?
+    cmp r3, #0   @ Null Konstanten liegen bereit ? Zero constants available ?
     beq.n 7f     @ Dann ist nichts zu tun.         Nothing to write.
 
 .konstanteninnenschleife:
@@ -453,6 +549,15 @@ konstantenschreiben: @ Special internal entry point with register dependencies.
   pop {pc}
 
 
+@------------------------------------------------------------------------------
+  Wortbirne Flag_visible|Flag_variable, "hook-quit" @ ( -- addr )
+  CoreVariable hook_quit
+@------------------------------------------------------------------------------  
+  pushdatos
+  ldr tos, =hook_quit
+  bx lr
+  .word quit_innenschleife  @ Simple loop for default
+
 @ -----------------------------------------------------------------------------
   Wortbirne Flag_visible, "quit" @ ( -- )
 quit:
@@ -474,6 +579,14 @@ quit:
    bl sammeltabelleleeren
   .endif
 
+  .ifdef universalflashinforth
+  bl initflash
+  .endif
+
+  .ifdef flash16bytesblockwrite
+  bl initflash
+  .endif
+
   @ Base und State setzen
 
   ldr r0, =base
@@ -485,8 +598,23 @@ quit:
   str r1, [r0]
 
   ldr r0, =konstantenfaltungszeiger
-  movs r1, #0    @ Clear constant folding pointer
+  @ movs r1, #0  @ Clear constant folding pointer
   str r1, [r0]
+
+  ldr r0, =Pufferstand
+  @ movs r1, #0  @ Set >IN to 0
+  str r1, [r0]
+
+  ldr r0, =current_source 
+  @ movs r1, #0  @ Empty TIB is source
+  str r1, [r0]
+  ldr r1, =Eingabepuffer
+  str r1, [r0, #4]
+
+quit_intern:
+  ldr r0, =hook_quit
+  ldr r0, [r0]
+  mov pc, r0
 
 quit_innenschleife:  @ Main loop of Forth system.
   bl query

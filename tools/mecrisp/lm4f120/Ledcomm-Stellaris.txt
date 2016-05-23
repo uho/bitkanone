@@ -1,6 +1,6 @@
 
 \ Ledcomm-Stellaris
-\   needs basisdefinitions.txt
+\   Connect LED with Anode (over optional 100 Ohms resistor) to PB0 and with Cathode directly to PB1.
 
 compiletoflash
 
@@ -17,8 +17,7 @@ $4000551C constant PORTB_DEN  ( Digital Enable )
 
 decimal
 
-
-: Sendedatenholen ( -- Daten true | false ) ?key if key dup emit true else false then ;
+: Sendedatenholen ( -- Daten true | false ) key? if key dup emit true else false then ;
 : Datenempfangen  ( Daten -- ) emit ;
 : Verbindungsanfang ( -- ) ."  (Up) "      ; \ Verbindungsanzeige nach Bedarf anpassen
 : Verbindungsende   ( -- ) ."  (Down) " cr ;
@@ -48,7 +47,7 @@ decimal
 ;
 
 
-18 constant Synchrondauer
+34 constant Synchrondauer
 
 8 variable Strahlzaehler
 0 variable Verbindungsdauer
@@ -57,7 +56,10 @@ decimal
 0 variable Sendedaten
 0 variable Datenregister
 
-: msb? ( x -- x Flag ) dup $80000000 and 0<> ;
+true variable Zustand ( Hell oder Dunkel ? )
+ 244 variable Basiszeit ( in Mikrosekunden )
+
+: msb? ( x -- x Flag ) dup 0< ;
 
 : HolePuls ( -- )
   8 Strahlzaehler ! \ Null-Puls, wird auch im Ruhezustand gesendet.
@@ -121,14 +123,16 @@ decimal
   Verbindungsdauer @ Synchrondauer = if Verbindungsende then
   0 Verbindungsdauer !
 
-  \ Für einen hellen Taktlauscher
-  HolePuls
-  Strahle
-
-  \ Für einen dunkelen Taktlauscher  
-  \ 0 Strahlzaehler !
-  \ 1 Lauschzaehler !
-  \ Lauschen-Vorbereitung
+  Zustand @ if
+    \ Für einen hellen Taktlauscher
+    HolePuls
+    Strahle
+  else
+    \ Für einen dunkelen Taktlauscher  
+    0 Strahlzaehler !
+    1 Lauschzaehler !
+    Lauschen-Vorbereitung
+  then
 ;
 
 : Taktlauscher ( -- )
@@ -159,7 +163,6 @@ decimal
   then
 ;
 
-
 : ledcomm ( -- )
 
   anode kathode or  portb_den  ! \ Ausgänge für die Ledcomm-LED
@@ -170,9 +173,13 @@ decimal
   Taktlauscher-init
 
   ['] Taktlauscher irq-systick !  \ (8 / 32768) s = 244 us
-  3904 systick                    \ 244 us * 16 MHz = 3904 Takte
+  Basiszeit @ 16 * $E000E014 !    \ 244 us * 16 MHz = 3904 Takte
+  7 $E000E010 !                   \ Enable the systick interrupt.
 
   eint begin again
 ;
+
+: bright ( -- ) true zustand ! ;
+: dark   ( -- ) false zustand ! ;
 
 compiletoram

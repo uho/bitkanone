@@ -87,9 +87,9 @@ digit_base_r3:  @ Erwartet Base in r3  Base has to be in r3 if you enter here.
 
 @------------------------------------------------------------------------------
   Wortbirne Flag_visible, "number" @ Number-Input.
-  @ ( String -- 0 )    Not recognized
-  @ ( String -- n 1 )  Single number
-  @ ( String -- d 2 )  Double number or fixpoint s15.16
+  @ ( String Length -- 0 )    Not recognized
+  @ ( String Length -- n 1 )  Single number
+  @ ( String Length -- d 2 )  Double number or fixpoint s15.16
 
 number: @ Tries to convert a string in one of the supported number formats.
 @------------------------------------------------------------------------------
@@ -112,8 +112,8 @@ number: @ Tries to convert a string in one of the supported number formats.
 
   push {r0, r1, r2, r3, r4, r5, lr}
 
-  movs r0, tos  @ Hole die Stringadresse      Fetch string address
-  ldrb r1, [r0] @ Hole die Länge des Strings  Fetch length of string
+  popda r1          @ Hole die Länge des Strings  Fetch length of string
+  subs r0, tos, #1  @ Hole die Stringadresse      Fetch string address
 
   movs tos, #1  @ Single length result
 
@@ -283,34 +283,18 @@ number_nachkommastellen: @ Digits after the decimal point.
 digitausgeben: @ ( u -- c ) Converts a digit into a character.
                @ If base is bigger than 36, unprintable digits are written as #
 @ -----------------------------------------------------------------------------
-  .ifdef m0core
   cmp tos, #10   @ Von 0-9:
   bhs 1f
     adds tos, #48 @ Schiebe zum Anfang der Zahlen  Shift to beginning of ASCII numbers
-    b 3f
+    bx lr
 
 1:cmp tos, #36   @ Von A-Z:
   bhs 2f 
     adds tos, #55 @ Alternative für Kleinbuchstaben: 87.                 For small letters: 87.
-    b 3f
+    bx lr
 
 2:movs tos, #35 @ Zeichen #, falls diese Ziffer nicht darstellbar ist. Character #, if digit is not printable
-3:bx lr
-
-  .else
-  cmp tos, #10   @ Von 0-9:
-  itt lo
-  addlo tos, #48 @ Schiebe zum Anfang der Zahlen  Shift to beginning of ASCII numbers
-  blo 1f
-
-  cmp tos, #36   @ Von A-Z:
-  ite lo         @ Schiebe zum Anfang der Großbuchstaben - 10 = 55.     Shift to beginning of ASCII-capital-letters- 10 = 55.
-  addlo tos, #55 @ Alternative für Kleinbuchstaben: 87.                 For small letters: 87.
-  movhs tos, #35 @ Zeichen #, falls diese Ziffer nicht darstellbar ist. Character #, if digit is not printable
-
-1:bx lr
-  .endif
-
+  bx lr
 
 @ -----------------------------------------------------------------------------
   Wortbirne Flag_visible, "hold" @ Fügt dem Zahlenstring von vorne ein Zeichen hinzu.
@@ -397,15 +381,16 @@ vorzeichen: @ ( Vorzeichen -- )
   b.n hold         @ an den Zahlenpuffer anhängen  put it into number buffer
 
 @------------------------------------------------------------------------------
-  Wortbirne Flag_visible, "#>" @ ( ZahlenrestL (ZahlenrestH) -- Addr )
+  Wortbirne Flag_visible, "#>" @ ( ZahlenrestL (ZahlenrestH) -- Addr Len )
 zifferstringende:  @ Schließt einen neuen Ziffernstring ab und gibt seine Adresse zurück.
                    @ Benutzt dafür einfach den Zahlenpuffer.
                    @ Finishes a number string and gives back its address.
 @------------------------------------------------------------------------------
-  adds psp, #4
-  ldr tos, =Zahlenpuffer @ Rest überschreiben, einfach in TOS legen.
+  ldr r0, =Zahlenpuffer
+  ldrb tos, [r0]
+  adds r0, #1
+  str r0, [psp]
   bx lr
-
 
 @------------------------------------------------------------------------------
   Wortbirne Flag_visible, "f#S"
@@ -564,7 +549,7 @@ ddot:   @ Prints a signed double number
 
 abschluss_zahlenausgabe:
   bl zifferstringende
-  bl type
+  bl stype
   bl space
   pop {pc}
 

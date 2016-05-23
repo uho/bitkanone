@@ -1,6 +1,6 @@
 @
-@    Mecrisp - A native code Forth implementation for MSP430 microcontrollers
-@    Copyright (C) 2011  Matthias Koch
+@    Mecrisp-Stellaris - A native code Forth implementation for ARM-Cortex M microcontrollers
+@    Copyright (C) 2013  Matthias Koch
 @
 @    This program is free software: you can redistribute it and/or modify
 @    it under the terms of the GNU General Public License as published by
@@ -208,7 +208,6 @@ flashpageerase:
 @ -----------------------------------------------------------------------------
         ldr r0, =FlashDictionaryAnfang
 eraseflash_intern:
-@  push {lr} Unnötig, am Ende ist Reset...
         ldr r1, =FlashDictionaryEnde
         movw r2, #0xFFFF
 
@@ -225,8 +224,7 @@ eraseflash_intern:
         cmp r0, r1
         bne 1b
   writeln "Finished. Reset !"
-@  pop {lr}
-  b Reset
+  b Restart
 
 @ -----------------------------------------------------------------------------
   Wortbirne Flag_visible, "eraseflashfrom" @ ( Addr -- )

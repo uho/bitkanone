@@ -17,62 +17,54 @@
 @
 
 @ -----------------------------------------------------------------------------
+@ Bit-position equates (for setting or clearing a single bit)
+@ -----------------------------------------------------------------------------
+
+  .equ  BIT0,    0x00000001
+  .equ  BIT1,    0x00000002
+  .equ  BIT2,    0x00000004
+  .equ  BIT3,    0x00000008
+  .equ  BIT4,    0x00000010
+  .equ  BIT5,    0x00000020
+  .equ  BIT6,    0x00000040
+  .equ  BIT7,    0x00000080
+  .equ  BIT8,    0x00000100
+  .equ  BIT9,    0x00000200
+  .equ  BIT10,   0x00000400
+  .equ  BIT11,   0x00000800
+  .equ  BIT12,   0x00001000
+  .equ  BIT13,   0x00002000
+  .equ  BIT14,   0x00004000
+  .equ  BIT15,   0x00008000
+  .equ  BIT16,   0x00010000
+  .equ  BIT17,   0x00020000
+  .equ  BIT18,   0x00040000
+  .equ  BIT19,   0x00080000
+  .equ  BIT20,   0x00100000
+  .equ  BIT21,   0x00200000
+  .equ  BIT22,   0x00400000
+  .equ  BIT23,   0x00800000
+  .equ  BIT24,   0x01000000
+  .equ  BIT25,   0x02000000
+  .equ  BIT26,   0x04000000
+  .equ  BIT27,   0x08000000
+  .equ  BIT28,   0x10000000
+  .equ  BIT29,   0x20000000
+  .equ  BIT30,   0x40000000
+  .equ  BIT31,   0x80000000
+
+@ -----------------------------------------------------------------------------
 @ Registerdefinitionen
 @ Register definitions
 @ -----------------------------------------------------------------------------
-
-@ Helferlein-Register
-@ Temporary registers that are not saved
-w .req r0
-x .req r1
-y .req r2
-z .req r3
 
 @ Datenstack mit TOS im Register.
 @ Achtung: Diese Register sind recht fest eingebaut, nicht versuchen, diese auszustauschen.
 @ Datastack with TOS in register.
 @ Never change this registers as they are hardwired in some places.
+
 tos .req r6
 psp .req r7
-
-
-@ -----------------------------------------------------------------------------
-@ Interrupt handler trampoline macro
-@ -----------------------------------------------------------------------------
-
-.macro interrupt Name
-
-@------------------------------------------------------------------------------
-  Wortbirne Flag_visible|Flag_variable, "irq-\Name" @ ( -- addr )
-  CoreVariable irq_hook_\Name
-@------------------------------------------------------------------------------  
-  pushdatos
-  ldr tos, =irq_hook_\Name
-  bx lr
-  .word nop_vektor  @ Startwert für unbelegte Interrupts   Start value for unused interrupts
-
-irq_vektor_\Name:
-  .ifdef m0core
-    ldr r0, =irq_hook_\Name
-  .else
-    movw r0, #:lower16:irq_hook_\Name
-    movt r0, #:upper16:irq_hook_\Name
-  .endif
-
-  ldr r0, [r0]  @ Cannot ldr to PC directly, as this would require bit 0 to be set accordingly.
-  mov pc, r0    @ No need to make bit[0] uneven as 16-bit Thumb "mov" to PC ignores bit 0.
-  @ Angesprungene Routine kehrt von selbst zurück...   Code returns itself
-
-@ 3.6.1 ARM-Thumb interworking
-@       Thumb interworking uses bit[0] on a write to the PC to determine the CPSR T bit. For 16-bit instructions,
-@       interworking behavior is as follows:
-@       *     ADD (4) and MOV (3) branch within Thumb state ignoring bit[0].
-
-@       For 32-bit instructions, interworking behavior is as follows:
-@       *     LDM and LDR support interworking using the value written to the PC.
-
-.endm
-
 
 @ -----------------------------------------------------------------------------
 @ Datenstack-Makros
@@ -89,7 +81,7 @@ irq_vektor_\Name:
   .endif
 
 .endm
-  
+
 .macro pushdaconst zahl @ Push small constant on Datastack
   pushdatos
   movs tos, #\zahl
@@ -128,9 +120,9 @@ irq_vektor_\Name:
 .endm
 
 .macro swap
-  ldr x, [psp]   @ Load X from the stack, no SP change.
+  ldr r1,  [psp] @ Load r0 from the stack, no SP change.
   str tos, [psp] @ Replace it with TOS.
-  mov tos, x     @ And vice versa.
+  mov tos, r1    @ And vice versa.
 .endm
 
 .macro to_r
@@ -143,32 +135,82 @@ irq_vektor_\Name:
   pop {tos}
 .endm
 
+.macro ddup
+  ldr r0, [psp]
+  pushdatos
+  subs psp, #4
+  str r0, [psp]
+.endm
+
+.macro ddrop
+  adds psp, #4
+  drop
+.endm
+
+  .ifdef erasedflashcontainszero
+    .equ erasedbyte, 0
+    .equ erasedhalfword, 0
+    .equ erasedword, 0
+
+    .equ writtenhalfword, 0xFFFF
+  .else
+    .equ erasedbyte,     0xFF
+    .equ erasedhalfword, 0xFFFF
+    .equ erasedword,     0xFFFFFFFF
+
+    .equ writtenhalfword, 0
+  .endif
+
 @ -----------------------------------------------------------------------------
 @ Flagdefinitionen
 @ Flag definitions
 @ -----------------------------------------------------------------------------
 
-.equ Flag_invisible,  0xFFFFFFFF
+.ifdef erasedflashcontainszero
+  .equ Flag_invisible,  0x0000  @ Erased Flash needs to give invisible Flags.
+  .equ Flag_visible,    0x8000
+.else
+  .equ Flag_invisible,  0xFFFF
+  .equ Flag_visible,    0x0000
+.endif
 
-.equ Flag_visible,    0x00000000
-.equ Flag_immediate,  0x00000010
-.equ Flag_inline,     0x00000020
-.equ Flag_immediate_compileonly, 0x30 @ Immediate + Inline
+.equ Flag_immediate,  Flag_visible | 0x0010
+.equ Flag_inline,     Flag_visible | 0x0020
+.equ Flag_immediate_compileonly, Flag_visible | 0x0030 @ Immediate + Inline
 
-.equ Flag_ramallot,   0x00000080      @ Ramallot means that RAM is reserved and initialised by catchflashpointers for this definition on startup
+.equ Flag_ramallot,   Flag_visible | 0x0080      @ Ramallot means that RAM is reserved and initialised by catchflashpointers for this definition on startup
 .equ Flag_variable,   Flag_ramallot|1 @ How many 32 bit locations shall be reserved ?
+.equ Flag_2variable,  Flag_ramallot|2
 
-.equ Flag_foldable,   0x00000040 @ Foldable when given number of constants are available.
-.equ Flag_foldable_0, 0x00000040
-.equ Flag_foldable_1, 0x00000041
-.equ Flag_foldable_2, 0x00000042
-.equ Flag_foldable_3, 0x00000043
-.equ Flag_foldable_4, 0x00000044
-.equ Flag_foldable_5, 0x00000045
-.equ Flag_foldable_6, 0x00000046
-.equ Flag_foldable_7, 0x00000047
+.equ Flag_foldable,   Flag_visible | 0x0040 @ Foldable when given number of constants are available.
+.equ Flag_foldable_0, Flag_visible | 0x0040
+.equ Flag_foldable_1, Flag_visible | 0x0041
+.equ Flag_foldable_2, Flag_visible | 0x0042
+.equ Flag_foldable_3, Flag_visible | 0x0043
+.equ Flag_foldable_4, Flag_visible | 0x0044
+.equ Flag_foldable_5, Flag_visible | 0x0045
+.equ Flag_foldable_6, Flag_visible | 0x0046
+.equ Flag_foldable_7, Flag_visible | 0x0047
 
-.equ Flag_opcodable,  0x00000008
+.equ Flag_buffer, Flag_visible | 0x0100
+.equ Flag_buffer_foldable, Flag_buffer|Flag_foldable
+
+
+
+.ifdef registerallocator
+
+.equ Flag_allocator, Flag_visible | 0x200
+.equ Flag_Sprungschlucker, Flag_visible | 0x400
+.equ Flag_bxlr, Flag_visible | 0x800
+.equ Flag_inlinecache, Flag_visible | 0x1000
+.equ Flag_Literator, Flag_visible | 0x2000  @ Tritt nur im Cache für die RA-Vererbung auf !
+
+.else
+
+.equ Flag_Sprungschlucker, 0 @ Deactivated, just to unify source code for both variants.
+.equ Flag_bxlr, 0
+
+.equ Flag_opcodable,  Flag_visible | 0x0008
 
 @ Of course, some of those cases are not foldable at all. But this way their bitmask is constructed.
 
@@ -178,6 +220,14 @@ irq_vektor_\Name:
 .equ Flag_opcodierbar_Schieben,          Flag_foldable|Flag_opcodable|4
 .equ Flag_opcodierbar_Speicherschreiben, Flag_foldable|Flag_opcodable|5
 .equ Flag_opcodierbar_Spezialfall,       Flag_foldable|Flag_opcodable|0
+
+  .ifdef m0core @ No special handling of this on M0
+.equ Flag_opcodierbar_Rechenlogik_M3,    Flag_opcodierbar_Rechenlogik
+  .else         @ Additional optimisations only available on M3/M4
+.equ Flag_opcodierbar_Rechenlogik_M3,    Flag_foldable|Flag_opcodable|6
+  .endif
+
+.endif
 
 @ -----------------------------------------------------------------------------
 @ Makros zum Bauen des Dictionary
@@ -191,6 +241,11 @@ irq_vektor_\Name:
   .equ \Name, CoreVariablenPointer
 .endm
 
+.macro DoubleCoreVariable, Name @  Benutze den Mechanismus, um initialisierte Variablen zu erhalten.
+  .set CoreVariablenPointer, CoreVariablenPointer - 8
+  .equ \Name, CoreVariablenPointer
+.endm
+
 @ Für uninitialisierte Variablen am Anfang des RAMs
 @ Makro für die gemütliche Speicherreservierung
 @ For uninitialised variables at the beginning of RAM.
@@ -200,8 +255,8 @@ irq_vektor_\Name:
   .set rampointer, rampointer + \Menge
 .endm
 
-@ Makros zum Aufbau des Dictionaries
-@ Macro for building dictionary.
+@ Makros zum Aufbau des Dictionarykette.
+@ Macros for building dictionary chain.
 .macro Wortbirne Flags, Name
 
       .ifdef m0core
@@ -209,12 +264,105 @@ irq_vektor_\Name:
       .else
         .p2align 1        @ Auf gerade Adressen ausrichten  Align to even locations
       .endif
-        .set Neu, .
-        .word Latest      @ Link einfügen  Insert Link
-        .set Latest, Neu
+
+      .equ Dictionary_\@, .  @ Labels for a more readable assembler listing only
+
+9:      .word 9f          @ Link einfügen  Insert Link
         .hword \Flags     @ Flags setzen, diesmal 2 Bytes ! Wir haben Platz und Ideen :-)  Flag field, 2 bytes, space for ideas left !
 
-	.byte 8f - 7f     @ Länge des Namensfeldes berechnen  Calculate length of name field
-7:	.ascii "\Name"    @ Namen anfügen  Insert name string
-8:	.p2align 1        @ 1 Bit 0 - Wieder gerade machen  Realign
+        .byte 8f - 7f     @ Länge des Namensfeldes berechnen  Calculate length of name field
+7:      .ascii "\Name"    @ Namen anfügen  Insert name string
+8:      .p2align 1        @ 1 Bit 0 - Wieder gerade machen  Realign
+
+      .equ Code_\@, .        @ Labels for a more readable assembler listing only
+.endm
+
+@ This one sets the link into user changeable Flash dictionary.
+.macro Wortbirne_Kernende Flags, Name
+
+      .ifdef m0core
+        .p2align 2        @ Auf 4 gerade Adressen ausrichten  Align to 4-even locations
+      .else
+        .p2align 1        @ Auf gerade Adressen ausrichten  Align to even locations
+      .endif
+
+      .equ Dictionary_\@, .  @ Labels for a more readable assembler listing only
+
+   .ifdef flash16bytesblockwrite
+9:      .word FlashDictionaryAnfang + 0x0C @ Insert Link with offset because of alignment issues in LPC1114FN28.
+   .else
+9:      .word FlashDictionaryAnfang  @ Link einfügen  Insert Link
+   .endif
+        .hword \Flags     @ Flags setzen, diesmal 2 Bytes ! Wir haben Platz und Ideen :-)  Flag field, 2 bytes, space for ideas left !
+
+        .byte 8f - 7f     @ Länge des Namensfeldes berechnen  Calculate length of name field
+7:      .ascii "\Name"    @ Namen anfügen  Insert name string
+8:      .p2align 1        @ 1 Bit 0 - Wieder gerade machen  Realign
+
+      .equ Code_\@, .        @ Labels for a more readable assembler listing only
+.endm
+
+
+@ -----------------------------------------------------------------------------
+@ Meldungen, hier definiert, damit das Zeilenende leicht geändert werden kann
+@ Messages are defined here for simple exchange of line endings.
+@ -----------------------------------------------------------------------------
+
+.macro write Meldung
+  bl dotgaensefuesschen
+        .byte 8f - 7f         @ Compute length of name field.
+7:      .ascii "\Meldung"
+8:      .p2align 1
+.endm
+
+.macro writeln Meldung
+  bl dotgaensefuesschen
+        .byte 8f - 7f         @ Compute length of name field.
+7:      .ascii "\Meldung\n"
+8:      .p2align 1
+.endm
+
+
+.ifdef registerallocator
+
+.macro welcome Meldung
+  bl dotgaensefuesschen
+        .byte 8f - 7f         @ Compute length of name field.
+7:      .ascii "Mecrisp-Stellaris RA 2.2.7"
+        .ascii "\Meldung\n"
+8:      .p2align 1
+.endm
+
+.else
+
+.macro welcome Meldung
+  bl dotgaensefuesschen
+        .byte 8f - 7f         @ Compute length of name field.
+7:      .ascii "Mecrisp-Stellaris 2.2.7"
+        .ascii "\Meldung\n"
+8:      .p2align 1
+.endm
+
+.endif
+
+.macro Fehler_Quit Meldung
+  bl dotgaensefuesschen
+        .byte 8f - 7f         @ Compute length of name field.
+7:      .ascii "\Meldung\n"
+8:      .p2align 1
+
+  .ifdef m0core
+    bl quit
+  .else
+    b quit
+  .endif
+.endm
+
+.macro Fehler_Quit_n Meldung
+  bl dotgaensefuesschen
+        .byte 8f - 7f         @ Compute length of name field.
+7:      .ascii "\Meldung\n"
+8:      .p2align 1
+
+  b.n quit
 .endm

@@ -19,16 +19,37 @@
 @ Stackjongleure
 @ Stack jugglers
 
+@ Stack pointers
+
 @ -----------------------------------------------------------------------------
-  Wortbirne Flag_visible, "depth" @ ( -- Zahl der Elemente, die vorher auf den Datenstack waren )
-                                  @ ( -- Number of elements that have been on datastack before )
+  Wortbirne Flag_inline, "sp@" @ ( -- a-addr )
 @ -----------------------------------------------------------------------------
-  @ Berechne den Stackfüllstand
-  ldr r1, =datenstackanfang @ Anfang laden  Calculate stack fill gauge
-  subs r1, psp @ und aktuellen Stackpointer abziehen
-  lsrs r1, #2 @ Durch 4 teilen  Divide through 4 Bytes/element.
-  pushda r1
+  pushdatos
+  movs tos, psp
   bx lr
+
+@ -----------------------------------------------------------------------------
+  Wortbirne Flag_inline, "sp!" @ ( a-addr -- )
+@ -----------------------------------------------------------------------------
+  movs psp, tos
+  ldm psp!, {tos}
+  bx lr
+
+@ -----------------------------------------------------------------------------
+  Wortbirne Flag_inline, "rp@" @ ( -- a-addr )
+@ -----------------------------------------------------------------------------
+  pushdatos
+  mov tos, sp
+  bx lr
+
+@ -----------------------------------------------------------------------------
+  Wortbirne Flag_inline, "rp!" @ ( a-addr -- )
+@ -----------------------------------------------------------------------------
+  mov sp, tos
+  ldm psp!, {tos}
+  bx lr
+
+@ Stack juggling
 
 @ -----------------------------------------------------------------------------
   Wortbirne Flag_foldable_1|Flag_inline, "dup" @ ( x -- x x )
@@ -53,9 +74,9 @@
 @ -----------------------------------------------------------------------------
   Wortbirne Flag_foldable_2|Flag_inline, "swap" @ ( x y -- y x )
 @ -----------------------------------------------------------------------------
-  ldr x, [psp]   @ Load X from the stack, no SP change.
-  str tos, [psp] @ Replace it with TOS.
-  movs tos, x     @ And vice versa.
+  ldr r1,  [psp]  @ Load X from the stack, no SP change.
+  str tos, [psp]  @ Replace it with TOS.
+  movs tos, r1    @ And vice versa.
   bx lr
 
 @ -----------------------------------------------------------------------------
@@ -75,32 +96,32 @@
   Wortbirne Flag_foldable_2|Flag_inline, "tuck" @ ( x1 x2 -- x2 x1 x2 )
 @ -----------------------------------------------------------------------------
 tuck:
-  ldm psp!, {w}
+  ldm psp!, {r0}
   subs psp, #8
   str tos, [psp, #4]
-  str w, [psp]
+  str r0, [psp]
   bx lr
 
 @ -----------------------------------------------------------------------------
   Wortbirne Flag_foldable_3|Flag_inline, "rot" @ ( x w y -- w y x )
 @ -----------------------------------------------------------------------------
 rot:
-  ldm psp!, {w, x}
+  ldm psp!, {r0, r1}
   subs psp, #8
-  str w, [psp, #4]
+  str r0, [psp, #4]
   str tos, [psp]
-  movs tos, x
+  movs tos, r1
   bx lr
 
 @ -----------------------------------------------------------------------------
   Wortbirne Flag_foldable_3|Flag_inline, "-rot" @ ( x w y -- y x w )
 @ -----------------------------------------------------------------------------
 minusrot:
-  ldm psp!, {w, x}
+  ldm psp!, {r0, r1}
   subs psp, #8
   str tos, [psp, #4]
-  str x, [psp]
-  movs tos, w
+  str r1, [psp]
+  movs tos, r0
   bx lr
 
 @ -----------------------------------------------------------------------------
@@ -114,6 +135,27 @@ minusrot:
   ldr tos, [psp, tos, lsl #2]  @ I love ARM. :-)
   bx lr
   .endif
+
+@ -----------------------------------------------------------------------------
+  Wortbirne Flag_visible, "depth" @ ( -- Zahl der Elemente, die vorher auf den Datenstack waren )
+                                  @ ( -- Number of elements that have been on datastack before )
+@ -----------------------------------------------------------------------------
+  @ Berechne den Stackfüllstand
+  ldr r1, =datenstackanfang @ Anfang laden  Calculate stack fill gauge
+  subs r1, psp @ und aktuellen Stackpointer abziehen
+  pushdatos
+  lsrs tos, r1, #2 @ Durch 4 teilen  Divide through 4 Bytes/element.
+  bx lr
+
+@ -----------------------------------------------------------------------------
+  Wortbirne Flag_visible, "rdepth"
+@ -----------------------------------------------------------------------------
+  pushdatos
+  mov tos, sp
+  ldr r1, =returnstackanfang @ Anfang laden  Calculate stack fill gauge
+  subs r1, tos @ und aktuellen Stackpointer abziehen
+  lsrs tos, r1, #2 @ Durch 4 teilen  Divide through 4 Bytes/element.
+  bx lr  
 
 @ Returnstack
 
@@ -142,4 +184,12 @@ minusrot:
   Wortbirne Flag_visible|Flag_inline, "rdrop" @ Entfernt das oberste Element des Returnstacks
 @------------------------------------------------------------------------------
   add sp, #4
+  bx lr
+
+@ -----------------------------------------------------------------------------
+  Wortbirne Flag_visible|Flag_inline, "rpick" @ ( u -- xu R: xu .. x1 x0 -- xu ... x1 x0 ) 
+@ -----------------------------------------------------------------------------
+  lsls tos, #2
+  add tos, sp
+  ldr tos, [tos]
   bx lr

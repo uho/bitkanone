@@ -25,14 +25,15 @@
 @ -----------------------------------------------------------------------------
   Wortbirne Flag_foldable_2, "2dup" @ ( 2 1 -- 2 1 2 1 )
 @ -----------------------------------------------------------------------------
-  ldr w, [psp]
+  ldr r0, [psp]
   pushdatos
   subs psp, #4
-  str w, [psp]
+  str r0, [psp]
   bx lr
 
 @ -----------------------------------------------------------------------------
   Wortbirne Flag_foldable_2|Flag_inline, "2drop" @ ( 2 1 -- )
+ddrop_vektor:
 @ -----------------------------------------------------------------------------
   adds psp, #4
   drop
@@ -42,65 +43,65 @@
   Wortbirne Flag_foldable_4, "2swap" @ ( 4 3 2 1 -- 2 1 4 3 )
 dswap:
 @ -----------------------------------------------------------------------------
-  ldm psp!, {w, x, y}
+  ldm psp!, {r0, r1, r2}
   subs psp, #4
-  str w, [psp]
+  str r0, [psp]
   pushdatos
   subs psp, #4
-  str y, [psp]
-  movs tos, x
+  str r2, [psp]
+  movs tos, r1
   bx lr
 
 @ -----------------------------------------------------------------------------
   Wortbirne Flag_foldable_2|Flag_inline, "2nip" @ ( 4 3 2 1 -- 2 1 )
 dnip:
 @ -----------------------------------------------------------------------------
-  ldm psp!, {w, x, y}
+  ldm psp!, {r0, r1, r2}
   subs psp, #4
-  str w, [psp]
+  str r0, [psp]
   bx lr
 
 @ -----------------------------------------------------------------------------
   Wortbirne Flag_foldable_4, "2over" @ ( 4 3 2 1 -- 4 3 2 1 4 3 )
 @ -----------------------------------------------------------------------------
-  ldr w, [psp, #8]
+  ldr r0, [psp, #8]
   pushdatos
   subs psp, #4
-  str w, [psp]
+  str r0, [psp]
   ldr tos, [psp, #12]  
   bx lr
 
 @ -----------------------------------------------------------------------------
   Wortbirne Flag_foldable_4, "2tuck" @ ( 4 3 2 1 -- 2 1 4 3 2 1 )
 @ -----------------------------------------------------------------------------
-  ldm psp!, {w, x, y} @ w=2 x=3 y=4
+  ldm psp!, {r0, r1, r2} @ w=2 x=3 y=4
   subs psp, #4
-  str w, [psp]
+  str r0, [psp]
   pushdatos
   subs psp, #4
-  str y, [psp]
+  str r2, [psp]
   subs psp, #4
-  str x, [psp]
+  str r1, [psp]
   subs psp, #4
-  str w, [psp]
+  str r0, [psp]
   bx lr
 
 @ -----------------------------------------------------------------------------
   Wortbirne Flag_foldable_6, "2rot" @ ( 6  5 4 3 2 1  -- 4  3 2 1 6 5 ) ( x w y -- w y x )
                                     @  16 12 8 4 0 tos  16 12 8 4 0 tos
 @ -----------------------------------------------------------------------------
-  ldr w, [psp]
-  ldr x, [psp, #8]
-  ldr y, [psp, #16]
+  ldr r0, [psp]
+  ldr r1, [psp, #8]
+  ldr r2, [psp, #16]
 
-  str w, [psp, #8]
-  str x, [psp, #16]
-  str y, [psp]
+  str r0, [psp, #8]
+  str r1, [psp, #16]
+  str r2, [psp]
 
-  ldr x, [psp, #4]
+  ldr r1, [psp, #4]
   str tos, [psp, #4]
   ldr tos, [psp, #12]
-  str x, [psp, #12]
+  str r1, [psp, #12]
 
   bx lr
 
@@ -108,18 +109,18 @@ dnip:
   Wortbirne Flag_foldable_6, "2-rot" @ ( 6  5 4 3 2 1 --  2  1 6 5 4 3 ( x w y -- y x w )
                                      @  16 12 8 4 0 tos  16 12 8 4 0 tos
 @ -----------------------------------------------------------------------------
-  ldr w, [psp]
-  ldr x, [psp, #8]
-  ldr y, [psp, #16]
+  ldr r0, [psp]
+  ldr r1, [psp, #8]
+  ldr r2, [psp, #16]
 
-  str w, [psp, #16]
-  str x, [psp]
-  str y, [psp, #8]
+  str r0, [psp, #16]
+  str r1, [psp]
+  str r2, [psp, #8]
 
-  ldr x, [psp, #12]
+  ldr r1, [psp, #12]
   str tos, [psp, #12]
   ldr tos, [psp, #4]
-  str x, [psp, #4]
+  str r1, [psp, #4]
 
   bx lr
 
@@ -136,8 +137,8 @@ dnip:
   Wortbirne Flag_inline, "2>r" @ Puts the two top elements of stack on returnstack.
                                @ Equal to swap >r >r 
 @------------------------------------------------------------------------------
-  ldm psp!, {w}
-  push {w}
+  ldm psp!, {r0}
+  push {r0}
   push {tos}
   ldm psp!, {tos}
   bx lr
@@ -148,9 +149,9 @@ dnip:
 @------------------------------------------------------------------------------
   pushdatos
   pop {tos}
-  pop {w}
+  pop {r0}
   subs psp, #4
-  str w, [psp]
+  str r0, [psp]
   bx lr
 
 @------------------------------------------------------------------------------
@@ -176,41 +177,41 @@ dnip:
 @------------------------------------------------------------------------------
   Wortbirne Flag_visible|Flag_foldable_2, "d2/"
 @------------------------------------------------------------------------------
-  ldr w, [psp]
-  lsls x, tos, #31 @ Prepare Carry
+  ldr r0, [psp]
+  lsls r1, tos, #31 @ Prepare Carry
   asrs tos, #1     @ Shift signed high part right
-  lsrs w, #1       @ Shift low part
-  orrs w, x
-  str w, [psp]
+  lsrs r0, #1       @ Shift low part
+  orrs r0, r1
+  str r0, [psp]
   bx lr
 
 @------------------------------------------------------------------------------
   Wortbirne Flag_inline|Flag_foldable_2, "d2*"
 @------------------------------------------------------------------------------
-  ldr w, [psp]
-  adds w, w
+  ldr r0, [psp]
+  adds r0, r0
   adcs tos, tos
-  str w, [psp]
+  str r0, [psp]
   bx lr
 
 @------------------------------------------------------------------------------
   Wortbirne Flag_visible|Flag_foldable_2, "dshr"
 @------------------------------------------------------------------------------
-  ldr w, [psp]
-  lsls x, tos, #31 @ Prepare Carry
+  ldr r0, [psp]
+  lsls r1, tos, #31 @ Prepare Carry
   lsrs tos, #1     @ Shift unsigned high part right
-  lsrs w, #1       @ Shift low part
-  orrs w, x
-  str w, [psp]
+  lsrs r0, #1       @ Shift low part
+  orrs r0, r1
+  str r0, [psp]
   bx lr
 
 @------------------------------------------------------------------------------
   Wortbirne Flag_inline|Flag_foldable_2, "dshl"
 @------------------------------------------------------------------------------
-  ldr w, [psp]
-  adds w, w
+  ldr r0, [psp]
+  adds r0, r0
   adcs tos, tos
-  str w, [psp]
+  str r0, [psp]
   bx lr
 
 @------------------------------------------------------------------------------
@@ -222,47 +223,46 @@ dabs:
   bx lr
 
 @------------------------------------------------------------------------------
-  Wortbirne Flag_foldable_3, "?dnegate" @ Negate a double number if top element on stack is negative.
+@  Wortbirne Flag_foldable_3, "?dnegate" @ Negate a double number if top element on stack is negative.
 @------------------------------------------------------------------------------
-qdnegate:
-  popda w
-  cmp w, #0
-  bmi.n dnegate
-  bx lr
+@   popda r0
+@   cmp r0, #0
+@   bmi.n dnegate
+@   bx lr
 
 @------------------------------------------------------------------------------
   Wortbirne Flag_foldable_2, "dnegate"
 @------------------------------------------------------------------------------
 dnegate:
-  ldr w, [psp]
-  movs x, #0
-  mvns w, w
+  ldr r0, [psp]
+  movs r1, #0
+  mvns r0, r0
   mvns tos, tos
-  adds w, #1
-  adcs tos, x
-  str w, [psp]
+  adds r0, #1
+  adcs tos, r1
+  str r0, [psp]
   bx lr
 
 @------------------------------------------------------------------------------
   Wortbirne Flag_inline|Flag_foldable_4, "d-" @ ( 1L 1H 2L 2H )
 @------------------------------------------------------------------------------
-  ldm psp!, {w, x, y}
-  subs y, w     @  Low-part first
-  sbcs x, tos   @ High-part with carry
-  movs tos, x
+  ldm psp!, {r0, r1, r2}
+  subs r2, r0     @  Low-part first
+  sbcs r1, tos   @ High-part with carry
+  movs tos, r1
 
   subs psp, #4
-  str y, [psp]
+  str r2, [psp]
   bx lr
 
 @------------------------------------------------------------------------------
   Wortbirne Flag_inline|Flag_foldable_4, "d+" @ ( 1L 1H 2L 2H )
 @------------------------------------------------------------------------------
-  ldm psp!, {w, x, y}
-  adds y, w
-  adcs tos, x
+  ldm psp!, {r0, r1, r2}
+  adds r2, r0
+  adcs tos, r1
   subs psp, #4
-  str y, [psp]
+  str r2, [psp]
   bx lr
   
 @------------------------------------------------------------------------------
@@ -320,9 +320,9 @@ um_star:
 um_star:
 @------------------------------------------------------------------------------
 
-    ldr w, [psp]
-    umull w, tos, w, tos @ Unsigned long multiply 32*32=64
-    str w, [psp]
+    ldr r0, [psp]
+    umull r0, tos, r0, tos @ Unsigned long multiply 32*32=64
+    str r0, [psp]
     bx lr
 
   .endif
@@ -372,9 +372,9 @@ m_star:
 m_star:
 @------------------------------------------------------------------------------
 
-    ldr w, [psp]
-    smull w, tos, w, tos @ Signed long multiply 32*32=64
-    str w, [psp]
+    ldr r0, [psp]
+    smull r0, tos, r0, tos @ Signed long multiply 32*32=64
+    str r0, [psp]
     bx lr
 
   .endif
@@ -564,126 +564,53 @@ ud_star: @ Unsigned multiply 64*64 = 128
 um_slash_mod: @ ( ud u -- u u ) Dividend Divisor -- Rest Ergebnis
              @ 64/32 = 32 Rest 32
 @------------------------------------------------------------------------------
-@  push {lr}
-@  pushdaconst 0
-@  bl ud_slash_mod
-@  drop
-@  nip
-@  pop {pc}
-
-  push {r4}
-                     @ tos : Divisor
-  ldr  r0, [psp, #4] @ (LL) Dividend L
-  ldr  r1, [psp, #0] @ (L)  Dividend H
-  movs r2, #0        @ (H)  Shift L
-
-  movs r4, #0        @ Result
-
-  @ Loop in r3:
-  movs r3, #32
-
-1:lsls r4, #1 @ Shift result
-  
-  adds r0, r0 @ Shift through first three registers
-  adcs r1, r1
-  adcs r2, r2 
-
-  @ Compare the top two registers to divisor
-  cmp tos, r2  @ Compare low part
-  bhi 2f      @ If lower or same:
-    subs r2, tos  @  Low-part first
-    adds r4, #1  @ Set bit in result
-2:
-  subs r3, #1
-  bne 1b
-  @ r3 is Zero now. No need to clear.
-
-  @ Shifted 32 places - r0 (LL) is shifted out completely now. 
-  @ Result is kept as it is and may overflow
-
-  @ Loop in r3:
-  movs r3, #32
-
-1:lsls r4, #1 @ Shift result
-  
-  adds r1, r1 @ Shift through two registers only
-  adcs r2, r2
-
-  @ Compare the top two registers to divisor
-  cmp tos, r2  @ Compare low part
-  bhi 2f      @ If lower or same:
-    subs r2, tos  @  Low-part first
-    adds r4, #1  @ Set bit in result
-2:
-  subs r3, #1
-  bne 1b
-  @ r3 is Zero now. No need to clear.
-
-  adds psp, #4
-  str r2, [psp] @ Remainder
-  movs tos, r4
-
-  pop {r4}
-  bx lr
+  push {lr}
+  pushdaconst 0
+  bl ud_slash_mod
+  drop
+  nip
+  pop {pc}
 
 @------------------------------------------------------------------------------
   Wortbirne Flag_visible|Flag_foldable_3, "m/mod"
               @ Signed symmetric divide 64/32 = 32 remainder 32
 m_slash_mod:  @ ( d n -- n n )
 @------------------------------------------------------------------------------
-@  push {lr}
-@  pushdatos                 @ s>d
-@  movs tos, tos, asr #31    @ Turn MSB into 0xffffffff or 0x00000000
-@  bl d_slash_mod
-@  drop
-@  nip
-@  pop {pc}
-
-  @ Check Divisor
   push {lr}
-  movs r0, tos, asr #31 @ Turn MSB into 0xffffffff or 0x00000000
-  beq 2f
-    @ ? / -
-    rsbs tos, tos, #0 @ Negate
-    bl minusrot
-    movs r0, tos, asr #31 @ Turn MSB into 0xffffffff or 0x00000000
-    beq 1f
-    @ - / -
-    bl dnegate
-    bl rot
-    bl um_slash_mod
+  pushdatos                 @ s>d
+  movs tos, tos, asr #31    @ Turn MSB into 0xffffffff or 0x00000000
+  bl d_slash_mod
+  drop
+  nip
+  pop {pc}
 
-    swap
-    rsbs tos, tos, #0 @ Negate for Negative remainder
-    swap
-    pop {pc}
+@------------------------------------------------------------------------------
+@ Tool for ud/mod
+@------------------------------------------------------------------------------
 
-1:  @ + / -
-    bl rot
-    bl um_slash_mod
-    rsbs tos, tos, #0 @ Negate for Negative result
-    pop {pc}
+  .macro division_step
+    @ Shift the long chain of four registers.
+    lsls r0, #1
+    adcs r1, r1
+    adcs r2, r2
+    adcs r3, r3
 
-2:  @ ? / +
-    bl minusrot
-    movs r0, tos, asr #31 @ Turn MSB into 0xffffffff or 0x00000000
-    beq 3f
-    @ - / +
-    bl dnegate
-    bl rot
+    @ Compare Divisor with top two registers
+    cmp r3, r5 @ Check high part first
+    bhi 1f
+    blo 2f
 
-    bl um_slash_mod
+    cmp r2, r4 @ High part is identical. Low part decides.
+    blo 2f
 
-    rsbs tos, tos, #0 @ Negate for Negative result
-    swap
-    rsbs tos, tos, #0 @ Negate for Negative remainder
-    swap
-    pop {pc}
+    @ Subtract Divisor from two top registers
+1:  subs r2, r4 @ Subtract low part
+    sbcs r3, r5 @ Subtract high part with carry
 
-3:  @ + / +
-    bl rot
-    bl um_slash_mod
-    pop {pc}
+    @ Insert a bit into Result which is inside LSB of the long register.
+    adds r0, #1
+2:
+  .endm
 
 @------------------------------------------------------------------------------
   Wortbirne Flag_visible|Flag_foldable_4, "ud/mod"
@@ -692,83 +619,57 @@ m_slash_mod:  @ ( d n -- n n )
          @ ( 1L 1H 2L tos: 2H -- Rem-L Rem-H Quot-L tos: Quot-H )
 @------------------------------------------------------------------------------
 ud_slash_mod:
-  push {r4, r5}
+   push {r4, r5}
 
-  @ ( DividendL DividendH DivisorL DivisorH -- RemainderL RemainderH ResultL ResultH )
-  @   8         4         0        tos      -- 8          4          0       tos
-
-                     @ tos : DivisorH
-  ldr  r4, [psp, #0] @ Divisor L
-
-  ldr  r0, [psp, #8] @ (LL) Dividend L
-  ldr  r1, [psp, #4] @ (L)  Dividend H
-  movs r2, #0        @ (H)  Shift L
-  @ movs r3, #0      @ (HH) Shift H     will be Zero after first loop.
-
-  movs r5, #0        @ Result
-
-  @ r2 (H) is empty, so r3 (HH) keeps empty during there steps.
-
-  @ Loop in r3:
-  movs r3, #32
-
-1:lsls r5, #1 @ Shift result
-  
-  adds r0, r0 @ Shift through first three registers
-  adcs r1, r1
-  adcs r2, r2 
-
-  @ Compare the top two registers to divisor
-  cmp r4, r2  @ Compare low part
-  bhi 2f      @ If lower or same:
-    subs r2, r4  @  Low-part first
-    adds r5, #1  @ Set bit in result
-2:
-  subs r3, #1
-  bne 1b
-  @ r3 is Zero now. No need to clear.
+   @ ( DividendL DividendH DivisorL DivisorH -- RemainderL RemainderH ResultL ResultH )
+   @   8         4         0        tos      -- 8          4          0       tos
 
 
-  @ 32 steps later, high part of result is finished.
-  @ Shifted 32 places - r0 (LL) is shifted out completely now. 
-  push {r5}          @ Result high goes to tos later
-  movs r5, #0        @ Result low
+   @ Shift-High Shift-Low Dividend-High Dividend-Low
+   @         r3        r2            r1           r0
 
-  @ Loop in r0:
-  movs r0, #32
+   movs r3, #0
+   movs r2, #0
+   ldr  r1, [psp, #4]
+   ldr  r0, [psp, #8]
 
-1:lsls r5, #1  @ Shift result
+   @ Divisor-High Divisor-Low
+   @          r5           r4
 
-  adds r1, r1  @ Shift through latest three Registers:
-  adcs r2, r2
-  adcs r3, r3
+ud_slash_mod_internal:
+   movs r5, tos
+   ldr  r4, [psp, #0]
 
-  @ Compare the top two registers to divisor
-  cmp tos, r3 @ Compare high part
-  bhi 2f      @ If lower or same:
-    cmp r4, r2  @ Compare low part
-    bhi 2f      @ If lower or same:
-      subs r2, r4  @  Low-part first
-      sbcs r3, tos @ High-part with carry
-      adds r5, #1  @ Set bit in result
-2:
+   @ For this long division, we need 64 individual division steps.
+   movs tos, #64
 
-  subs r0, #1
-  bne 1b
-  @ r0 is Zero now. 
+3: division_step
+   subs tos, #1
+   bne 3b
 
-  @ Division finished.
-  @ Move low part of result into stack:
-  str r5, [psp, #0]
+   @ Now place all values to their destination.
+   movs tos, r1       @ Result-High
+   str  r0, [psp, #0] @ Result-Low
+   str  r3, [psp, #4] @ Remainder-High
+   str  r2, [psp, #8] @ Remainder-Low
 
-  @ Move remainder into stack:
-  str r2, [psp, #8] @ RemainderL
-  str r3, [psp, #4] @ RemainderH
+   pop {r4, r5}
+   bx lr
 
-  pop {tos} @ High part of result
+@------------------------------------------------------------------------------
+@  Wortbirne Flag_visible|Flag_foldable_4, "uf/mod" @ Internal helper only.
+uf_slash_mod: @ Divide 64/64 = 64 Remainder 64. Puts decimal point in the middle. Overflow possible.
+         @ ( ud1 ud2 -- ud ud)
+         @ ( 1L 1H 2L tos: 2H -- Rem-L Rem-H Quot-L tos: Quot-H )
+@------------------------------------------------------------------------------
+   push {r4, r5}
 
-  pop {r4, r5}
-  bx lr
+   movs r3, #0
+   ldr  r2, [psp, #4]
+   ldr  r1, [psp, #8]
+   movs r0, #0
+
+   b.n ud_slash_mod_internal
 
 @------------------------------------------------------------------------------
   Wortbirne Flag_visible|Flag_foldable_4, "d/mod"
@@ -879,91 +780,6 @@ f_star: @ Signed multiply s31.32
     bl dnegate
   pop {pc}
 
-
-@------------------------------------------------------------------------------
-@  Wortbirne Flag_visible|Flag_foldable_4, "uf/mod" @ Internal helper only.
-uf_slash_mod: @ Divide 64/64 = 64 Remainder 64. Puts decimal point in the middle. Overflow possible.
-         @ ( ud1 ud2 -- ud ud)
-         @ ( 1L 1H 2L tos: 2H -- Rem-L Rem-H Quot-L tos: Quot-H )
-@------------------------------------------------------------------------------
-
-  push {r4, r5}
-
-  @ ( DividendL DividendH DivisorL DivisorH -- RemainderL RemainderH ResultL ResultH )
-  @   8         4         0        tos      -- 8          4          0       tos
-
-                     @ tos : DivisorH
-  ldr  r4, [psp, #0] @ Divisor L
-
-  @ movs r0, #0        @ (LL) Shift LL - free for loop counter.
-  ldr  r1, [psp, #8] @ (L)  Dividend L
-  ldr  r2, [psp, #4] @ (H)  Dividend H
-  movs r3, #0        @ (HH) Shift HH
-
-  movs r5, #0        @ Result
-
-  @ Loop in r0:
-  movs r0, #32
-
-1:lsls r5, #1   @ Shift result
-
-  adds r1, r1  @ Shift through latest three Registers:
-  adcs r2, r2
-  adcs r3, r3
-
-  @ Compare the top two registers to divisor
-  cmp tos, r3 @ Compare high part
-  bhi 2f      @ If lower or same:
-    cmp r4, r2  @ Compare low part
-    bhi 2f      @ If lower or same:
-      subs r2, r4  @  Low-part first
-      sbcs r3, tos @ High-part with carry
-      adds r5, #1  @ Set bit in result
-2:
-
-  subs r0, #1
-  bne 1b
-  @ r0 is Zero now. 
-
-  @ r1 is shifted out completely. Use this as temporary storage for Result-Low.
-  movs r1, r5
-
-  @ Loop in r0 again for high part:
-  movs r0, #32
-
-1:lsls r5, #1 @ Shift result
-
-  adds r2, r2 @ Shift through latest two Registers:
-  adcs r3, r3
-
-  @ Compare the top two registers to divisor
-  cmp tos, r3 @ Compare high part
-  bhi 2f      @ If lower or same:
-    cmp r4, r2  @ Compare low part
-    bhi 2f      @ If lower or same:
-      subs r2, r4  @  Low-part first
-      sbcs r3, tos @ High-part with carry
-      adds r5, #1  @ Set bit in result
-2:
-
-  subs r0, #1
-  bne 1b
-  @ r0 is Zero now. 
-
-  @ Division finished.
-  @ Move low part of result into stack:
-  str r5, [psp, #0]
-
-  @ Move remainder into stack:
-  str r2, [psp, #8] @ RemainderL
-  str r3, [psp, #4] @ RemainderH
-
-  movs tos, r1 @ High part of result
-
-  pop {r4, r5}
-  bx lr
-
-
 @------------------------------------------------------------------------------
   Wortbirne Flag_visible|Flag_foldable_4, "f/"
   @ Signed divide for s31.32. Overflow possible. Sign wrong in this case.
@@ -1030,16 +846,16 @@ uf_slash_mod: @ Divide 64/64 = 64 Remainder 64. Puts decimal point in the middle
   @ ( 2L 2H 1L 1H -- Flag )
   @   8y 4x 0w tos
 @------------------------------------------------------------------------------
-  ldm psp!, {w, x, y}
+  ldm psp!, {r0, r1, r2}
 
   @ Check High:
-  cmp tos, x
+  cmp tos, r1
   bhi 2f @ True
   bne 1f @ False - Not bigger, not equal --> Lower.
   @ Fall through if high part is equal
 
   @ Check Low:
-  cmp w, y
+  cmp r0, r2
   bhi 2f
 
 @ False:
@@ -1056,16 +872,16 @@ uf_slash_mod: @ Divide 64/64 = 64 Remainder 64. Puts decimal point in the middle
   @ ( 2L 2H 1L 1H -- Flag )
   @   8y 4x 0w tos
 @------------------------------------------------------------------------------
-  ldm psp!, {w, x, y}
+  ldm psp!, {r0, r1, r2}
 
   @ Check High:
-  cmp x, tos
+  cmp r1, tos
   bhi 2f @ True
   bne 1f @ False - Not bigger, not equal --> Lower.
   @ Fall through if high part is equal
 
   @ Check Low:
-  cmp y, w
+  cmp r2, r0
   bhi 2f
 
 @ False:
@@ -1082,16 +898,16 @@ uf_slash_mod: @ Divide 64/64 = 64 Remainder 64. Puts decimal point in the middle
   @ ( 2L 2H 1L 1H -- Flag )
   @   8y 4x 0w tos
 @------------------------------------------------------------------------------
-  ldm psp!, {w, x, y}
+  ldm psp!, {r0, r1, r2}
 
   @ Check High:
-  cmp tos, x
+  cmp tos, r1
   bgt 2f @ True
   bne 1f @ False - Not bigger, not equal --> Lower.
   @ Fall through if high part is equal
 
   @ Check Low:
-  cmp w, y
+  cmp r0, r2
   bgt 2f
 
 @ False:
@@ -1108,16 +924,16 @@ uf_slash_mod: @ Divide 64/64 = 64 Remainder 64. Puts decimal point in the middle
   @ ( 2L 2H 1L 1H -- Flag )
   @   8y 4x 0w tos
 @------------------------------------------------------------------------------
-  ldm psp!, {w, x, y}
+  ldm psp!, {r0, r1, r2}
 
   @ Check High:
-  cmp x, tos
+  cmp r1, tos
   bgt 2f @ True
   bne 1f @ False - Not bigger, not equal --> Lower.
   @ Fall through if high part is equal
 
   @ Check Low:
-  cmp y, w
+  cmp r2, r0
   bgt 2f
 
 @ False:
@@ -1138,45 +954,40 @@ uf_slash_mod: @ Divide 64/64 = 64 Remainder 64. Puts decimal point in the middle
   bx lr
 
 @------------------------------------------------------------------------------
-  Wortbirne Flag_foldable_2, "d0=" @ ( 1L 1H -- Flag )
+  Wortbirne Flag_foldable_2|Flag_inline, "d0=" @ ( 1L 1H -- Flag )
 @------------------------------------------------------------------------------
-  ldm psp!, {w}
-  cmp w, #0
-  beq 1f
-    movs tos, #0
-    bx lr
-
-1:subs tos, #1
+  ldm psp!, {r0}
+  orrs tos, r0
+  subs tos, #1
   sbcs tos, tos
   bx lr
 
 @------------------------------------------------------------------------------
   Wortbirne Flag_foldable_4, "d<>" @ ( 1L 1H 2L 2H -- Flag )
 @------------------------------------------------------------------------------
-  ldm psp!, {w, x, y}
+  ldm psp!, {r0, r1, r2}
 
-  cmp w, y
-  bne 1f
+  eors r0, r2
+  eors tos, r1
+  orrs tos, r0
 
-  subs tos, x        @ Z=equality; if equal, TOS=0
-  beq 2f
-
-1:movs tos, #0
+  subs tos, #1
+  sbcs tos, tos
   mvns tos, tos
-2:bx lr
+
+  bx lr
 
 @------------------------------------------------------------------------------
   Wortbirne Flag_foldable_4, "d=" @ ( 1L 1H 2L 2H -- Flag )
 @------------------------------------------------------------------------------
-  ldm psp!, {w, x, y}
+  ldm psp!, {r0, r1, r2}
 
-  cmp w, y
-  beq 1f
-    movs tos, #0
-    bx lr
+  eors r0, r2
+  eors tos, r1
+  orrs tos, r0
 
-1:subs tos, x       @ Z=equality; if equal, TOS=0
-  subs tos, #1      @ Wenn es Null war, gibt es jetzt einen Überlauf
+  subs tos, #1
   sbcs tos, tos
+
   bx lr
 

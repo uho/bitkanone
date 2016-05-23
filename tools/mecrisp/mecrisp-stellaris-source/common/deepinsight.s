@@ -23,8 +23,6 @@
   Wortbirne Flag_visible, "hex." @ Print an unsigned number in Base 16, independent of number subsystem.
 hexdot: @ ( u -- ) @ Funktioniert unabhängig vom restlichen Zahlensystem.
 @ -----------------------------------------------------------------------------
-
-  .ifdef m0core
   
         push    {r0, r1, r2, lr}
         popda r1 @ Zahl holen
@@ -51,29 +49,6 @@ hexdot: @ ( u -- ) @ Funktioniert unabhängig vom restlichen Zahlensystem.
 
         bl space
         pop     {r0, r1, r2, pc}
-
-  .else
-        push    {r0, r1, lr}
-        popda r1 @ Zahl holen
-        movs    r0, #32 @ Zahl der Bits, die noch zu bearbeiten sind  Number of Bits left
-
-1:      subs    r0, #4       @ 4 Bits weniger  4 Bits less to do
-        pushdatos            @ Platz auf dem Stack schaffen  Make space on datastack
-
-        lsrs    tos, r1, r0   @ Schiebe den Wert passend   Shift accordingly
-        ands    tos, #15      @ Eine Hex-Ziffer maskieren  Mask 4 Bits
-        cmp     tos, #9       @ Ziffer oder Buchstabe ?    Number or letter ?
-        ite     hi
-          addhi   tos, #55 @ Passendes Zeichen konstruieren
-          addls   tos, #48 @ Calculate ASCII
-        bl      emit
-        cmp     r0, #0
-        bne     1b
-
-        bl space
-        pop     {r0, r1, pc}
-  .endif
-
 
 @ -----------------------------------------------------------------------------
   Wortbirne Flag_visible, "h.s"  @ Prints out data stack, uses unsigned hexadecimal snumbers. 
@@ -149,15 +124,16 @@ dots: @ Malt den Stackinhalt, diesmal verschönert !
         pop {r0, r1, r2, r3, r4, pc}
 
 
+  .ifdef debug
 @ -----------------------------------------------------------------------------
-  Wortbirne Flag_visible, "dump" @ ( addr -- ) Prints some memory locations beginning with given adress
-  @ Malt den Speicherinhalt beginnend ab der angegebenen Adresse
+  Wortbirne Flag_visible, "dump" @ ( addr u -- ) Prints some memory locations beginning with given adress
+dump:  @ Malt den Speicherinhalt beginnend ab der angegebenen Adresse
 @ -----------------------------------------------------------------------------
   push {lr}
+  popda r1 @ Zahl der Speicherstellen holen  Number of locations to print
   popda r0 @ Adresse holen  Fetch address
-  movs r1, #32 @ Zahl der Speicherstellen holen  Number of locations to print
 
-  writeln " dump>"
+  writeln ""
 1: @ Schleife
   pushda r0
   bl hexdot
@@ -170,7 +146,9 @@ dots: @ Malt den Stackinhalt, diesmal verschönert !
   subs r1, #1
   bne 1b
 
+  writeln ""
   pop {pc}
+  .endif
 
 
 @ -----------------------------------------------------------------------------
@@ -178,69 +156,44 @@ dots: @ Malt den Stackinhalt, diesmal verschönert !
 words: @ Malt den Dictionaryinhalt
 @ -----------------------------------------------------------------------------
   push {lr}
-  writeln "words"
+  writeln ""
 
   bl dictionarystart
+
+1:@ Adresse:
+  write "Address: "
+  dup
+  bl hexdot
+
+  @ Link
+  write "Link: "
+  dup
+  ldr tos, [tos]
+  bl hexdot
+
+  @ Flagfeld
+  write "Flags: "
+  dup
+  ldrh tos, [tos, #4]
+  bl hexdot
+
+  @ Einsprungadresse
+  write "Code: "
+  adds r0, tos, #6 @ Current location +2 for skipping Flags +4 for skipping Link contains name string.
+  bl skipstring
+  pushda r0
+  bl hexdot
+
+  write "Name: "
+  dup
+  adds tos, #6 @ Current location +2 for skipping Flags +4 for skipping Link contains name string.
+  bl type
+
+  writeln ""
+
+  bl dictionarynext
   popda r0
+  beq 1b
 
-1:   @ Ist an der Stelle der Namenslänge $FF ? Dann ist der Faden abgelaufen.
-     @ Prüfe hier die Namenslänge als Kriterium
-     @ Is name length equal to $FF ? That designates the end of the Dictionary.
-
-
-     ldrb r1, [r0, #6] @ Hole Namenslänge, Stelle plus 2 Bytes Flags 4 Bytes Link  
-     cmp r1, #0xFF     @ Fetch name length. Current location +2 for skipping Flags +4 for skipping Link.
-     beq 2f
-
-        @ Adresse:
-        write "Address: "
-        pushda r0
-        bl hexdot
-
-        @ Link
-        write "Link: "
-        ldr r2, [r0]
-        adds r0, #4
-        pushda r2
-        bl hexdot
-
-        @ Flagfeld
-        ldrh r1, [r0]
-        adds r0, #2
-        write "Flags: "
-        pushda r1
-        bl hexdot
-
-        @ Name
-        @write "Name: "
-        pushda r0 @ Adresse des Namensstrings  Address of Name string - to be printed later
-        @bl type
-
-        bl skipstring
-
-        @ Einsprungadresse
-        write "Code: "
-        pushda r0
-        bl hexdot
-
-        write "Name: "
-        bl type
-
-        writeln ""
-
-        @ Link prüfen:
-
-        .ifdef m0core
-        ldr r0, =-1
-        cmp r2, r0
-        .else
-        cmp r2, #-1    @ Ungesetzter Link bedeutet Ende erreicht  Unset Link means end of dictionary detected.
-        .endif
-
-        beq 2f         @ Link=-1 means: End of dictionary reached.
-
-        @ Link folgen
-        movs r0, r2
-        b 1b      
-
-2:      pop {pc}
+  drop
+  pop {pc}

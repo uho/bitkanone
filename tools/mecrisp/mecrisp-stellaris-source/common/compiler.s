@@ -35,64 +35,41 @@
 tick: @ Nimmt das nächste Token aus dem Puffer, suche es und gibt den Einsprungpunkt zurück.
 @ -----------------------------------------------------------------------------
   push {lr}
-  bl token @ Hole den Namen der neuen Definition.  Fetch Name
-  @ ( Tokenadresse )
-
-  @ Überprüfe, ob der Token leer ist.
-  @ Das passiert, wenn der Eingabepuffer nach create leer ist.
-
-  popda r0       @ Check if token is empty. Maybe input buffer is exhausted after Tick...
-  ldrb r1, [r0]
-  cmp r1, #0
-  bne 1f
-
-    @ Token ist leer. Brauche Stacks nicht zu putzen.
-    Fehler_Quit " ' needs name !"
-
-1:@ Tokenname ist okay.
-  @ Prüfe, ob es schon existiert.
-  pushda r0
-  bl find
-  @ ( Einsprungadresse Flags )
-  drop @ Benötige die Flags hier nicht. Möchte doch nur schauen, ob es das Wort schon gibt.
-  @ ( Einsprungadresse )  No need for Flags here. Just check if it is found and give back its code entry address.
-  cmp tos, #0
-  bne 2f
-nicht_gefunden:
-    ldr r0, =Tokenpuffer
-    pushda r0
-    bl type
-    Fehler_Quit " not found."
-
-2:@ Gefunden, alles gut
+  bl token
+  bl find_not_found
+  popda r0 @ Drop Flags into r0 - used by postpone !
   pop {pc}
 
-@ : pif postpone if immediate ;  : ja? pif ." Ja" else ." Nein" then ;
 @------------------------------------------------------------------------------
-  Wortbirne Flag_immediate, "postpone" @ Sucht das nächste Wort im Eingabestrom  Search next token and fill it in Dictionary in a special way.
+  Wortbirne Flag_immediate_compileonly, "postpone" @ Sucht das nächste Wort im Eingabestrom  Search next token and fill it in Dictionary in a special way.
                                        @ und fügt es auf besondere Weise ein.
 @------------------------------------------------------------------------------
   push {lr}
 
-  bl token
-  @ ( Pufferadresse )
-  bl find
-  @ ( Einsprungadresse Flags )
-  popda r0 @ Flags holen  Fetch Flags
+  bl tick @ Stores Flags into r0 !
 
   @ ( Einsprungadresse )  
-  cmp tos, #0  @ Not found ?
-  beq.n nicht_gefunden
 
-1:movs r1, #Flag_immediate  @ In case definition is immediate: Compile a call to its address.
-  ands r1, r0
-  cmp r1, #Flag_immediate
-  beq 4f
+  .ifdef registerallocator
 
-2:movs r1, #Flag_inline    @ In case definition is inline: Compile entry point as literal and a call to inline, afterwards.
+  pushda r0
+  swap
+  bl literalkomma
+  bl literalkomma
+  pushdatos
+  ldr tos, =kompilator
+  bl callkomma
+  pop {pc}
+
+  .else
+
+1:movs r1, #Flag_immediate & ~Flag_visible @ In case definition is immediate: Compile a call to its address.
   ands r1, r0
-  cmp r1, #Flag_inline
-  bne 3f                             @ ( Einsprungadresse )
+  bne 4f
+
+2:movs r1, #Flag_inline & ~Flag_visible    @ In case definition is inline: Compile entry point as literal and a call to inline, afterwards.
+  ands r1, r0
+  beq 3f                             @ ( Einsprungadresse )
     bl literalkomma                  @ Einsprungadresse als Konstante einkompilieren
     pushdatos
     ldr tos, =inlinekomma
@@ -104,6 +81,8 @@ nicht_gefunden:
     ldr tos, =callkomma
 4:  bl callkomma
     pop {pc}
+
+  .endif
 
 @ -----------------------------------------------------------------------------
   Wortbirne Flag_visible, "inline," @ ( addr -- )
@@ -178,7 +157,7 @@ suchedefinitionsende: @ Rückt den Pointer in r0 ans Ende einer Definition vor.
 
 @ -----------------------------------------------------------------------------
   Wortbirne Flag_visible, "ret," @ ( -- )
-retkomma: @ Write pop [pc} opcode
+retkomma: @ Write pop {pc} opcode
 @ -----------------------------------------------------------------------------
   @ Mache das mit pop {pc}
   pushdaconstw 0xbd00 @ Opcode für pop {pc} schreiben
@@ -197,63 +176,19 @@ retkomma: @ Write pop [pc} opcode
 @------------------------------------------------------------------------------
   Wortbirne Flag_immediate_compileonly, "recurse" @ Für Rekursion. Führt das gerade frische Wort aus. Execute freshly defined definition.
 @------------------------------------------------------------------------------
-  push {lr}
-  bl fadenende_einsprungadresse
-  bl callkomma
-  pop {pc}
+  pushdatos
+  ldr tos, =Einsprungpunkt
+  ldr tos, [tos]
+  b.n callkomma
 
-@------------------------------------------------------------------------------
-fadenende_einsprungadresse: @ Kleines Helferlein spart Platz
-                            @ Calculate code start address of current latest definition
-@------------------------------------------------------------------------------
-  push {r0, r1, r2, r3, lr} @ Vermutlich unnötig, wird nur in dodoes und recurse benutzt.
-  ldr r0, =Fadenende
-  ldr r0, [r0]
-
-  @ --> Codestartadresse, analog zur Routine in words
-
-        @ Flagfeld
-        @adds r0, #2
-
-        @ Link
-        @adds r0, #4
-        adds r0, #6  @ Skip Flags and Link
-
-        ldrb r1, [r0] @ Länge des Strings holen                   Length of Name
-
-  .ifdef emulated16bitflashwrites
-  @ If 16-Bit Flash writes are emulated, the name length byte may not be set yet.
-  cmp r1, #0xFF
-  bne 1f
-  @ It is not set. That means that the length byte is in the Flash write buffer.
-  @ Scan the buffer for the needed address !
-  pushda r0 @ Address to search for...
-  push {r0}
-  bl sammeltabellensuche
-@  writeln "Fadenende-Einsprungadresse suchte im Flashpuffer"
-  pop {r0}
-  movs r1, #0xff @ Mask for low byte
-  ands r1, tos
-  drop  
-1:
-  .endif
-
-        adds r1, #1  @ Plus 1 Byte für die Länge                One more for length byte
-        movs r2, #1  @ Wenn es ungerade ist, noch einen mehr:  Maybe one more for aligning
-        ands r2, r1
-        adds r1, r2
-        adds r0, r1
-
-  @ r0 enthält jetzt die Codestartadresse der aktuellen Definition.
-  pushda r0
-  pop {r0, r1, r2, r3, pc}
- 
 @ -----------------------------------------------------------------------------
-  Wortbirne Flag_foldable_0, "state" @ ( -- addr )
+  Wortbirne Flag_visible|Flag_variable, "state" @ ( -- addr )
+  CoreVariable state
 @ -----------------------------------------------------------------------------
   pushdatos
   ldr tos, =state
   bx lr
+  .word 0
 
 @------------------------------------------------------------------------------
   Wortbirne Flag_visible, "]" @ In den Compile-Modus übergehen  Switch to compile mode
@@ -282,6 +217,20 @@ fadenende_einsprungadresse: @ Kleines Helferlein spart Platz
 
   bl create
 
+
+  .ifdef registerallocator
+
+    ldr r0, =state
+    movs r1, #1 @ So eine Art bx lx-Kompilierzustand-Flag in State legen
+    str r1, [r0]
+
+    @ Neue Definition: Auf jeden Fall den Inline-Cache frisch leeren !
+    ldr r0, =inline_cache_count
+    movs r1, #0
+    str r1, [r0]  @ Inline Cache empty
+
+  .else
+
   pushdaconstw 0xb500 @ Opcode für push {lr} schreiben  Write opcode for push {lr}
   bl hkomma
 
@@ -290,10 +239,16 @@ fadenende_einsprungadresse: @ Kleines Helferlein spart Platz
   mvns r1, r1 @ -1
   str r1, [r0]
 
+  .endif
+
   pop {pc}
 
 @ -----------------------------------------------------------------------------
+  .ifdef registerallocator
+  Wortbirne Flag_immediate_compileonly|Flag_bxlr, ";" @ ( -- )
+  .else
   Wortbirne Flag_immediate_compileonly, ";" @ ( -- )
+  .endif
 @ -----------------------------------------------------------------------------
   push {lr}
 
@@ -304,10 +259,34 @@ fadenende_einsprungadresse: @ Kleines Helferlein spart Platz
     Fehler_Quit " Stack not balanced."
 1: @ Stack balanced, ok
 
+
+  .ifdef registerallocator
+    @ Jetzt entweder bx lr oder pop {pc} schreiben.
+     
+     ldr r0, =state
+     ldr r0, [r0]
+     adds r1, r0, #1
+     beq 3f
+       cmp r0, #rawinlinelength + 1  @ Kurze Definitionen mit bis zu 5 Einfach-Opcodes (State zählt ab 1) werden direkt als inline markiert.
+       bhi 2f         
+         pushdaconstw (Flag_inline | Flag_bxlr ) & ~Flag_visible
+         bl setflags
+2:     pushdaconstw 0x4770 @ bx lr
+       bl hkomma @ bx lr schreiben !
+
+       @ Prinzipiell ist diese Definition Inline-tauglich, auch wenn sie vielleicht ein bisschen zu lang geworden sein könnte.
+       @ An dieser Stelle ist es also sicher, aus dem Inline-Cache heraus den RA zu bemühen.
+       @ Mal schauen, was daraus wird !
+
+       bl inline_cache_schreiben
+       b.n 4f
+3:   @ Doch ein pop {pc} ? Dann war wohl etwas enthalten, was nicht durch inline laufen darf.
+  .endif
+
   pushdaconstw 0xbd00 @ Opcode für pop {pc} schreiben  Write opcode for pop {pc}
   bl hkomma
-
-  bl smudge
+  
+4:bl smudge
 
   ldr r0, =state
   movs r1, #0 @ false-Flag in State legen.
@@ -320,74 +299,74 @@ fadenende_einsprungadresse: @ Kleines Helferlein spart Platz
 execute:
 @ -----------------------------------------------------------------------------
   popda r0
-  adds r0, #1 @ Ungerade Adresse für Thumb-Befehlssatz
-  mov pc, r0  @ Uneven address für Thumb-Instructionset
+  mov pc, r0
 
 @ -----------------------------------------------------------------------------
   Wortbirne Flag_immediate, "immediate" @ ( -- )
 @ -----------------------------------------------------------------------------
-  pushdaconst Flag_immediate
+  pushdaconst Flag_immediate & ~Flag_visible
   b.n setflags
 
 @ -----------------------------------------------------------------------------
-  Wortbirne Flag_immediate, "inline" @ ( -- )
+  Wortbirne Flag_immediate|Flag_foldable_0, "inline" @ ( -- )
+setze_inlineflag:
 @ -----------------------------------------------------------------------------
-  pushdaconst Flag_inline
+  pushdaconst Flag_inline & ~Flag_visible
   b.n setflags
 
 @ -----------------------------------------------------------------------------
   Wortbirne Flag_immediate, "compileonly" @ ( -- )
 @ -----------------------------------------------------------------------------
-  pushdaconst Flag_immediate_compileonly
+  pushdaconst Flag_immediate_compileonly & ~Flag_visible
   b.n setflags
 
 @ -----------------------------------------------------------------------------
-  Wortbirne Flag_immediate, "0-foldable" @ ( -- )
+  Wortbirne Flag_immediate|Flag_foldable_0, "0-foldable" @ ( -- )
 setze_faltbarflag:
 @ -----------------------------------------------------------------------------
-  pushdaconst Flag_foldable_0
+  pushdaconst Flag_foldable_0 & ~Flag_visible
   b.n setflags
 
 @ -----------------------------------------------------------------------------
-  Wortbirne Flag_immediate, "1-foldable" @ ( -- )
+  Wortbirne Flag_immediate|Flag_foldable_0, "1-foldable" @ ( -- )
 @ -----------------------------------------------------------------------------
-  pushdaconst Flag_foldable_1
+  pushdaconst Flag_foldable_1 & ~Flag_visible
   b.n setflags
 
 @ -----------------------------------------------------------------------------
-  Wortbirne Flag_immediate, "2-foldable" @ ( -- )
+  Wortbirne Flag_immediate|Flag_foldable_0, "2-foldable" @ ( -- )
 @ -----------------------------------------------------------------------------
-  pushdaconst Flag_foldable_2
+  pushdaconst Flag_foldable_2 & ~Flag_visible
   b.n setflags
 
 @ -----------------------------------------------------------------------------
-  Wortbirne Flag_immediate, "3-foldable" @ ( -- )
+  Wortbirne Flag_immediate|Flag_foldable_0, "3-foldable" @ ( -- )
 @ -----------------------------------------------------------------------------
-  pushdaconst Flag_foldable_3
+  pushdaconst Flag_foldable_3 & ~Flag_visible
   b.n setflags
 
 @ -----------------------------------------------------------------------------
-  Wortbirne Flag_immediate, "4-foldable" @ ( -- )
+  Wortbirne Flag_immediate|Flag_foldable_0, "4-foldable" @ ( -- )
 @ -----------------------------------------------------------------------------
-  pushdaconst Flag_foldable_4
+  pushdaconst Flag_foldable_4 & ~Flag_visible
   b.n setflags
 
 @ -----------------------------------------------------------------------------
-  Wortbirne Flag_immediate, "5-foldable" @ ( -- )
+  Wortbirne Flag_immediate|Flag_foldable_0, "5-foldable" @ ( -- )
 @ -----------------------------------------------------------------------------
-  pushdaconst Flag_foldable_5
+  pushdaconst Flag_foldable_5 & ~Flag_visible
   b.n setflags
 
 @ -----------------------------------------------------------------------------
-  Wortbirne Flag_immediate, "6-foldable" @ ( -- )
+  Wortbirne Flag_immediate|Flag_foldable_0, "6-foldable" @ ( -- )
 @ -----------------------------------------------------------------------------
-  pushdaconst Flag_foldable_6
+  pushdaconst Flag_foldable_6 & ~Flag_visible
   b.n setflags
 
 @ -----------------------------------------------------------------------------
-  Wortbirne Flag_immediate, "7-foldable" @ ( -- )
+  Wortbirne Flag_immediate|Flag_foldable_0, "7-foldable" @ ( -- )
 @ -----------------------------------------------------------------------------
-  pushdaconst Flag_foldable_7
+  pushdaconst Flag_foldable_7 & ~Flag_visible
   b.n setflags
 
 @ -----------------------------------------------------------------------------

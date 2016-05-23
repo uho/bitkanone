@@ -19,32 +19,51 @@
 @ Input routine Query - with Unicode support.
 
 @ -----------------------------------------------------------------------------
-  Wortbirne Flag_visible, "query" @ Collecting your keystrokes ! Forth at your fingertips :-)
-query: @ ( -- ) Nimmt einen String in den Eingabepuffer auf
+  Wortbirne Flag_visible, "cexpect" @ ( cstr-addr maxlength ) Collecting your keystrokes into a counted string !
 @ -----------------------------------------------------------------------------
-        push    {r0, r1, r2, r3, lr}
+  push {lr}
+  ldr r0, [psp]  @ Fetch address
+  push {r0}
+  adds r0, #1    @ Add one to skip length byte for accept area
+  str r0, [psp]
+  bl accept
+  pop {r0}
+  strb tos, [r0] @ Store accepted length into length byte of counted string
+  drop
+  pop {pc}
+
+@ -----------------------------------------------------------------------------
+  Wortbirne Flag_visible, "accept" @ ( c-addr maxlength -- length ) Collecting your keystrokes !
+accept: @ Nimmt einen String entgegen und legt ihn in einen Puffer.
+@ -----------------------------------------------------------------------------
+        push    {lr}
 
         @ Registers:
         @ r0: Tastendruck      The pressed key
         @ r1: Pufferzeiger     Buffer pointer
         @ r2: Pufferfüllstand  Buffer fill gauge
         @ r3: Helferlein       Temporary
+        @ tos:Längengrenze     Maximum length
 
-        ldr r0, =Pufferstand @ Aktueller Offset in den Eingabepuffer  Zero characters consumed yet
-        movs r1, #0
-        strb r1, [r0]
-
-        ldr  r1, =Eingabepuffer @ Pufferadresse holen                 Fetch buffer address
+        ldm psp!, {r1}          @ Pufferadresse holen                 Fetch buffer address
+        subs r1, #1             @ Einen abziehen, weil die Routine bislang eigentlich abgezählte Strings erwartet hat.
         movs r2, #0             @ Momentaner Pufferfüllstand Null     Currently zero characters typed
 
 1:      @ Queryschleife  Collcting loop
         bl key              @ Tastendruck holen  Fetch keypress
         popda r0
+
+        cmp     r0, #127          @ Delete
+        beq     6f                @ Should do the same as Backspace
+
         cmp     r0, #32           @ ASCII 0-31 sind Steuerzeichen, 32 ist Space. Die Steuerzeichen müssten einzeln behandelt werden.
         bhs     2f                @ Space wird hier einfach so mit aufgenommen.
         
         @ Steuerzeichen bearbeiten.
         @ Handle control characters below ascii 32 = space here.
+        cmp     r0, #9            @ TAB ?
+        beq     5f                @ Jump to replace TAB with space and include as normal character.
+
         cmp     r0, #10           @ Bei Enter sind wir fertig - LF  Finish with LF
         beq     3f
         cmp     r0, #13           @ Bei Enter sind wir fertig - CR  Finish with CR
@@ -53,7 +72,7 @@ query: @ ( -- ) Nimmt einen String in den Eingabepuffer auf
         cmp     r0, #8            @ Backspace
         bne     1b                @ Alle anderen Steuerzeichen ignorieren  Ignore all other control characters
 
-          cmp     r2, #0            @ Null Zeichen im Puffer ? Dann ist nichts zu löschen da.
+6:        cmp     r2, #0            @ Null Zeichen im Puffer ? Dann ist nichts zu löschen da.
           beq     1b                @ Zero characters in buffer ? Then we cannot delete one.
 
           bl dotgaensefuesschen  @ Clear a character visually. Emit sequence to delete one character in terminal.
@@ -86,9 +105,7 @@ query: @ ( -- ) Nimmt einen String in den Eingabepuffer auf
 
       @ Hole das letzte Zeichen und schneide es ab.
       @ Fetch character from the end and cut it off.
-      movs    r3, r1            @ Pufferadresse kopieren
-      adds    r3, r2            @ Füllstand hinzuaddieren
-      ldrb    r0, [r3]          @ Letztes Zeichen im Puffer holen
+      ldrb    r0, [r1, r2]      @ Letztes Zeichen im Puffer holen
       subs    r2, #1            @  und abschneiden
 
       @ Teste das Zeichen auf Unicode, oberstes Bit gesetzt ?
@@ -108,22 +125,93 @@ query: @ ( -- ) Nimmt einen String in den Eingabepuffer auf
       ands r3, r0
       beq 4b @ Wenn nein, lösche ein weiteres Zeichen. No ? Delete one more byte.
       b 1b   @ Wenn ja, fertig. Dann habe ich soeben das erste Byte eines Unicode-Zeichens entfernt.  Yes ? Finished deleting.
-       
+
+
+5:      @ Replace TAB with space:
+        movs r0, #32       
 
 2:      @ Normale Zeichen annehmen
         @ Add a character to buffer if there is space left and echo it back.
-        cmp     r2, #maximaleeingabe @ Ist der Puffer voll ?  Check buffer fill level.
+        cmp     r2, tos              @ Ist der Puffer voll ?  Check buffer fill level.
         bhs     1b                   @ Keine weiteren Zeichen mehr annehmen.  No more characters if buffer is full !
 
         pushda r0
         bl emit                   @ Zeichen ausgeben
         adds    r2, #1            @ Pufferfüllstand erhöhen
-        movs    r3, r1            @ Pufferadresse kopieren
-        adds    r3, r2            @ Füllstand hinzuaddieren
-        strb    r0, [r3]          @ Zeichen in Puffer speichern
+        strb    r0, [r1, r2]      @ Zeichen in Puffer speichern
         b       1b
 
 3:      @ Return has been pressed: Store string length, print space and leave.
-        strb    r2, [r1]          @ Pufferfüllstand schreiben
+        movs tos, r2              @ Give back accepted length
         bl space                  @ Statt des Zeilenumbruches ein Leerzeichen ausgeben
-        pop {r0, r1, r2, r3, pc}  @ Print a space instead of line ending
+        pop {pc}
+
+@ -----------------------------------------------------------------------------
+  Wortbirne Flag_foldable_0, "tib" @ ( -- addr )
+@ -----------------------------------------------------------------------------
+tib:
+  pushdatos
+  ldr tos, =Eingabepuffer
+  bx lr
+
+@ -----------------------------------------------------------------------------
+  Wortbirne Flag_visible|Flag_variable, ">in" @ ( -- addr )
+  CoreVariable Pufferstand
+@ -----------------------------------------------------------------------------
+  pushdatos
+  ldr tos, =Pufferstand
+  bx lr
+  .word 0
+
+@------------------------------------------------------------------------------
+  Wortbirne Flag_visible|Flag_2variable, "current-source" @ ( -- addr )
+  DoubleCoreVariable current_source
+@------------------------------------------------------------------------------  
+  pushdatos
+  ldr tos, =current_source
+  bx lr
+  .word 0              @ Empty TIB for default
+  .word Eingabepuffer
+
+
+@ -----------------------------------------------------------------------------
+  Wortbirne Flag_visible, "setsource" @ ( c-addr len -- )
+setsource:
+@ -----------------------------------------------------------------------------
+  ldr r0, =current_source
+  ldm psp!, {r1}
+  str tos, [r0]
+  str r1, [r0, #4]
+  drop
+  bx lr
+
+@ -----------------------------------------------------------------------------
+  Wortbirne Flag_visible, "source" @ ( c-addr len -- )
+source:
+@ -----------------------------------------------------------------------------
+  pushdatos
+  ldr tos, =current_source
+
+  subs psp, #4        @ Opcodes for 2@
+  ldr r0, [tos, #4]
+  str r0, [psp]
+  ldr tos, [tos]
+  bx lr
+
+@ -----------------------------------------------------------------------------
+  Wortbirne Flag_visible, "query" @ Collecting your keystrokes into TIB ! Forth at your fingertips :-)
+query: @ ( -- ) Nimmt einen String in den Eingabepuffer auf
+@ -----------------------------------------------------------------------------
+  push {r0, r1, r2, r3, lr}
+
+  ldr r0, =Pufferstand @ Aktueller Offset in den Eingabepuffer  Zero characters consumed yet
+  movs r1, #0
+  str r1, [r0]
+
+  bl tib
+  dup
+  pushdaconst Maximaleeingabe
+  bl accept
+  bl setsource
+  
+  pop {r0, r1, r2, r3, pc}

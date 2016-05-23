@@ -25,6 +25,39 @@ registerliteralkomma:  @ Compile code to put a literal constant into a register.
 @ -----------------------------------------------------------------------------
   push {r0, r1, r2, r3, r4, r5, lr}
 
+  @ Ist die gewünschte Konstante eine kleine negative Zahl ?
+  @ Is desired constant a small negative number ?
+
+  ldr r3, =0xFFFF0000
+  ldr r0, [psp]
+  ands r0, r3
+  cmp r0, r3
+  bne 1f
+
+    ldr r0, [psp]
+    mvns r0, r0   @ Invert constant
+    str r0, [psp]
+
+    push {tos} @ Save desired register
+
+    bl registerliteralkomma_intern
+    
+    pushdaconstw 0x43C0 @ Opcode: mvns r0, r0
+    pop {r0}
+    orrs tos, r0
+    lsls r0, #3
+    orrs tos, r0
+    bl hkomma
+    pop {r0, r1, r2, r3, r4, r5, pc}
+
+1:bl registerliteralkomma_intern
+  pop {r0, r1, r2, r3, r4, r5, pc}
+
+@ -----------------------------------------------------------------------------
+registerliteralkomma_intern:
+@ -----------------------------------------------------------------------------
+  push {lr}
+
   @ TOS: Konstante
   @ r0:  Helferlein
   @ r1:  LSLS-Opcode, fertig vorbereitet für den gewünschten Zielregister, aber noch ohne Schubweite.
@@ -103,7 +136,7 @@ registerliteralkomma:  @ Compile code to put a literal constant into a register.
     bl hkomma
 
 6:drop @ Konstante vergessen  Drop constant
-  pop {r0, r1, r2, r3, r4, r5, pc}
+  pop {pc}
 
 
 @ -----------------------------------------------------------------------------
@@ -310,9 +343,9 @@ callkomma:  @ Versucht einen möglichst kurzen Aufruf einzukompilieren.
 
 @ -----------------------------------------------------------------------------
   Wortbirne Flag_visible, "literal," @ ( x -- )
-literalkomma: @ Nur r3 muss erhalten bleiben  Save r3 !
+literalkomma: @ Save r1, r2 and r3 !
 @ -----------------------------------------------------------------------------
-  push {r3, lr}
+  push {lr}
 
 @     128:	3f04      	subs	r7, #4
 @     12a:	603e      	str	r6, [r7, #0]
@@ -322,42 +355,55 @@ literalkomma: @ Nur r3 muss erhalten bleiben  Save r3 !
   pushdaconstw 0x603e  @ str tos, [psp, #0]
   bl hkomma
 
-  @ Ist die gewünschte Konstante eine kleine negative Zahl ?
-  @ Is desired constant a small negative number ?
-  ldr r3, =0xFFFF0000
-  movs r0, tos
-  ands r0, r3
-  cmp r0, r3
-  bne 2f
-
-    mvns tos, tos
-
-    pushdaconst 6 @ Target register r6=tos
-    bl registerliteralkomma
-
-    pushdaconstw 0x43F6 @ Opcode: mvns tos, tos
-    bl hkomma
-    pop {r3, pc}
-
-2:
   pushdaconst 6 @ Target register r6=tos
   bl registerliteralkomma
 
-  pop {r3, pc}
+  pop {pc}
 
-/* Some tests:
-schuhu: push {lr} 
-        writeln "Es sitzt der Uhu auf einem Baum und macht Schuhuuuu, Schuhuuuu !"
-        pop {pc}
 
-: c <builds $12345678 , does> . ." does>-Teil " ;  c uhu ' uhu dump
-: con <builds h, does> h@ ;  42 con antwort    antwort .
-*/
+.ifdef m0core_start_offset
+  .equ dodoesaddr, (dodoes - addresszero) + m0core_start_offset @ To circumvent address relocation issues
+.else
+  .equ dodoesaddr, dodoes - addresszero @ To circumvent address relocation issues
+.endif
 
-.equ dodoesaddr, dodoes - addresszero @ To circumvent address relocation issues
-.equ dodoes_byte1, ((dodoesaddr + 1)>>8) & 255
-.equ dodoes_byte2,  (dodoesaddr + 1)     & 255
+.equ dodoes_byte1, ((dodoesaddr + 1)>>24) & 255
+.equ dodoes_byte2, ((dodoesaddr + 1)>>16) & 255
+.equ dodoes_byte3, ((dodoesaddr + 1)>> 8) & 255
+.equ dodoes_byte4,  (dodoesaddr + 1)      & 255
 
+@ -----------------------------------------------------------------------------
+  Wortbirne Flag_visible, "create" @ ANS-Create with default action.
+@ -----------------------------------------------------------------------------
+  push {lr}
+  bl builds
+
+  @ Copy of the inline-code of does>
+
+  .ifdef does_above_64kb
+    movs r0, #dodoes_byte1
+    lsls r0, #8
+    adds r0, #dodoes_byte2
+    lsls r0, #8
+    adds r0, #dodoes_byte3
+    lsls r0, #8
+    adds r0, #dodoes_byte4
+  .else @ High word not needed as dodoes in core is in the lowest 64 kb.
+    movs r0, #dodoes_byte3
+    lsls r0, #8
+    adds r0, #dodoes_byte4
+  .endif
+
+  blx r0 @ Den Aufruf mit absoluter Adresse einkompilieren. Perform this call with absolute addressing.
+
+    @ Die Adresse ist hier nicht auf dem Stack, sondern in LR. LR ist sowas wie "TOS" des Returnstacks.
+    @ Address is in LR which is something like "TOS in register" of return stack.
+
+  pushdatos
+  mov tos, lr
+  subs tos, #1 @ Denn es ist normalerweise eine ungerade Adresse wegen des Thumb-Befehlssatzes.  Align address. It is uneven because of Thumb-instructionset bit set.
+  
+  pop {pc}
 
 @------------------------------------------------------------------------------
   Wortbirne Flag_inline, "does>"
@@ -374,11 +420,20 @@ does: @ Gives freshly defined word a special action.
   @  movt r0, #:upper16:dodoes+1   
   @ blx r0 @ Den Aufruf mit absoluter Adresse einkompilieren. Perform this call with absolute addressing.
 
+  .ifdef does_above_64kb
+    movs r0, #dodoes_byte1
+    lsls r0, #8
+    adds r0, #dodoes_byte2
+    lsls r0, #8
+    adds r0, #dodoes_byte3
+    lsls r0, #8
+    adds r0, #dodoes_byte4
+  .else @ High word not needed as dodoes in core is in the lowest 64 kb.
+    movs r0, #dodoes_byte3
+    lsls r0, #8
+    adds r0, #dodoes_byte4
+  .endif
 
-  @ Benötigt das High-Word nicht, da dodoes weit am Anfang des Flashs sitzt.  High word not needed as dodoes in core is in the lowest 64 kb.
-  movs r0, #dodoes_byte1
-  lsls r0, #8
-  adds r0, #dodoes_byte2
   blx r0 @ Den Aufruf mit absoluter Adresse einkompilieren. Perform this call with absolute addressing.
 
     @ Die Adresse ist hier nicht auf dem Stack, sondern in LR. LR ist sowas wie "TOS" des Returnstacks.
@@ -416,14 +471,30 @@ dodoes:
   subs tos, #1 @ Einen abziehen. Diese Adresse ist schon ungerade für Thumb-2, aber callkomma fügt nochmal eine 1 dazu. 
                @ Subtract one. Adress is already uneven for Thumb-instructionset, but callkomma will add one anyway.
 
-  bl fadenende_einsprungadresse @ Get the address the long call has to be inserted.
-
     @ Dictionary-Pointer verbiegen:
       @ Dictionarypointer sichern
       ldr r2, =Dictionarypointer
       ldr r3, [r2] @ Alten Dictionarypointer auf jeden Fall bewahren  Save old Dictionarypointer.
 
-  popda r1     @ r1 enthält jetzt die Codestartadresse der aktuellen Definition.
+  ldr r1, =Einsprungpunkt @ Get the address the long call has to be inserted.
+  ldr r1, [r1] @ r1 enthält jetzt die Codestartadresse der aktuellen Definition.
+
+  .ifdef flash16bytesblockwrite
+    @ Special case for LPC1114FN28 which has different alignment depending if compiling into Flash (16-even) or into RAM (4-even).
+
+    ldr r0, =Backlinkgrenze
+    cmp r3, r0
+    bhs.n dodoes_ram
+
+2:    movs r0, #15
+      ands r0, r1
+      cmp r0, #14
+      beq 1f
+        adds r1, #2
+        b 2b
+
+dodoes_ram:
+  .endif
 
   @ This is to align dictionary pointer to have does> target locations that are always 4-even
   movs r0, #2
@@ -452,12 +523,39 @@ dodoes:
 
 @ -----------------------------------------------------------------------------
   Wortbirne Flag_visible, "<builds"
-        @ Beginnt ein Defining-Wort.  Start a defining definition.
+builds: @ Beginnt ein Defining-Wort.  Start a defining definition.
         @ Dazu lege ich ein neues Wort an, lasse eine Lücke für den Call-Befehl. Create a new definition and leave space for inserting the does>-Call later.
         @ Keine Strukturkennung  No structure pattern matching here !
 @ -----------------------------------------------------------------------------
   push {lr}
   bl create       @ Neues Wort wird erzeugt
+
+  .ifdef flash16bytesblockwrite
+    @ It is necessary for LPC1114FN28 that Flash writes are aligned on 16.
+    @ So if we are compiling into Flash, we need to make sure that
+    @ the block the user might write to later is properly aligned.
+    ldr r0, =Dictionarypointer
+    ldr r1, [r0]
+
+    ldr r2, =Backlinkgrenze
+    cmp r1, r2
+    bhs.n builds_ram
+
+      @ See where we are. The sequence written for <builds does> is 18 Bytes long on M0.
+      @ So we need to advance to 16n + 14 so that the opcode sequence ends on a suitable border.
+
+2:    bl here
+      movs r0, #15
+      ands tos, r0
+      cmp tos, #14
+      drop
+      beq 1f
+        pushdaconst 0x0036  @ nop = movs tos, tos
+        bl hkomma
+        b 2b
+
+builds_ram:
+  .endif
 
   @ This is to align dictionary pointer to have does> target locations that are always 4-even
     bl here
@@ -465,7 +563,7 @@ dodoes:
     ands tos, r0
     drop
     bne 1f
-      pushdaconstw 0x0036  @ nop = movs tos, tos
+      pushdaconst 0x0036  @ nop = movs tos, tos
       bl hkomma
 1:
 

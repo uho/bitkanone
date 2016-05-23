@@ -21,12 +21,12 @@ compiletoflash
 	black-break
 	clear s" \1\.\c *\y\2 \1*\m\2 \1*" markup flush 2500 ms
 	black-break ;
-	
+
 : ev ( -- )
 
 glider		50 step-break
 separator
-s" \1      \r\1\:Maker Faire\.\1\c Hannover " >m-scroll
+s" \1      \r\1\:Maker Faire\.\1\c Hannover 2016" >m-scroll
 s" \1      \.\w\2Hallo, ich bin die \rb\yi\gt\ck\ba\mn\ro\yn\ge " >m-scroll
 s" \1      \.\w\2Ich bestehe aus einem \rTiva-LaunchPad\w und viele \rL\ge\bd\ws mit eingebautem \rWS2812B chip. " >m-scroll
 s" \1      \.\w\2Das eigentlich besondere an mir ist aber, dass mein \rCompiler\w auf dem \cChip \yselbst\w sitzt! " >m-scroll
@@ -50,10 +50,10 @@ s" \1      \.\w\2Um mehr zu erfahren, frage doch einfach eine der \rKohlenstoffe
 		ev
 	key? until ;
 
-: init init 
+: init init
 	1000 ms
 	key-flush
-	off 100 ms $003F00 >rgb 
+	off 100 ms $003F00 >rgb
 	5000 ms
 	key? invert if
 		eve
@@ -62,4 +62,3 @@ s" \1      \.\w\2Um mehr zu erfahren, frage doch einfach eine der \rKohlenstoffe
 		$3F0000 >rgb
 		." Human presence detected" cr
 	then ;
-

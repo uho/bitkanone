@@ -26,7 +26,7 @@ compiletoflash
 
 glider		50 step-break
 separator
-s" \1      \r\1\:Maker Faire\.\1\c Hannover 2016" >m-scroll
+s" \1      \r\1\:Maker Faire\.\1\c Hannover 2017" >m-scroll
 s" \1      \.\w\2Hallo, ich bin die \rb\yi\gt\ck\ba\mn\ro\yn\ge " >m-scroll
 s" \1      \.\w\2Ich bestehe aus einem \rTiva-LaunchPad\w und viele \rL\ge\bd\ws mit eingebautem \rWS2812B chip. " >m-scroll
 s" \1      \.\w\2Das eigentlich besondere an mir ist aber, dass mein \rCompiler\w auf dem \cChip \yselbst\w sitzt! " >m-scroll

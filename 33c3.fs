@@ -1,4 +1,4 @@
-\ (c)copyright 2015 by Gerald Wodni
+\ (c)copyright 2016 by Gerald Wodni
 \ 32C3 Hamburg greeting
 
 \ very-cold
@@ -18,9 +18,9 @@ compiletoflash
 	off 1500 ms ;
 
 : separator
-	black-break
-	clear s" \1\.\c *\y\2 \1*\m\2 \1*" markup flush 2500 ms
-	black-break ;
+        forth flush 5000 ms
+        around
+        forth flush 5000 ms ;
 	
 : ev ( -- )
 
@@ -62,5 +62,3 @@ s" \1      \.\w\2If you want to know more, ask one of the \rcarbon units \won th
 		$3F0000 >rgb
 		." Human presence detected" cr
 	then ;
-
-init
